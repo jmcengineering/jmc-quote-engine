@@ -192,6 +192,8 @@
   .logo-preview:focus{outline:none;border-color:var(--brass);box-shadow:0 0 0 3px rgba(185,121,63,.18);}
   .logo-preview img{max-width:100%;max-height:100%;object-fit:contain;}
   .logo-preview.empty{font-family:var(--mono);font-size:10px;color:var(--ink-soft);text-align:center;padding:6px;}
+  .saved-quote-row{display:flex; justify-content:space-between; align-items:center; padding:10px 4px; border-bottom:1px solid #eee9dc;}
+  .saved-quote-row:last-child{border-bottom:none;}
 </style>
 </head>
 <body>
@@ -215,6 +217,7 @@
   <div class="tabs">
     <div class="tab active" data-tab="ratemaster">Rate Master</div>
     <div class="tab" data-tab="quote">Quote Builder</div>
+    <div class="tab" data-tab="saved">Saved Quotes</div>
     <div class="tab" data-tab="notes">What Changed &amp; Why</div>
   </div>
 
@@ -252,6 +255,20 @@
         </div>
       </div>
       <p class="note" id="storageNote"></p>
+    </div>
+
+    <div class="card">
+      <h2>OneDrive Storage <span class="sub">Where saved quotes and settings live once you're signed in</span></h2>
+      <div class="grid cols-3">
+        <div style="grid-column: span 2;">
+          <label>OneDrive folder name</label>
+          <input type="text" id="oneDriveFolderInput" value="JMC Quotations" placeholder="JMC Quotations">
+        </div>
+        <div style="display:flex; align-items:flex-end;">
+          <button class="btn btn-outline btn-sm" id="syncSettingsBtn">Sync settings now</button>
+        </div>
+      </div>
+      <p class="note" id="oneDriveStatusNote">Sign in with Microsoft (top right) to save quotes and sync these settings to OneDrive — otherwise this tab only saves inside Claude's own preview.</p>
     </div>
 
     <div class="card">
@@ -382,9 +399,21 @@
         <div><span class="label">Line items</span><br><span id="partCount">0</span></div>
       </div>
       <div class="toolbar" style="margin:0;">
+        <button class="btn btn-outline" id="saveQuoteBtn" style="background:#fff;">Save to OneDrive</button>
         <button class="btn btn-brass" id="exportPdfBtn">Export PDF (client copy)</button>
         <button class="btn btn-outline" id="exportXlsxBtn" style="background:#fff;">Export Excel (full working file)</button>
       </div>
+    </div>
+  </div>
+
+  <!-- SAVED QUOTES -->
+  <div class="panel" id="panel-saved">
+    <div class="card">
+      <h2>Saved Quotes <span class="sub">Stored in your OneDrive folder — set the folder name in Rate Master → OneDrive Storage</span></h2>
+      <div class="toolbar">
+        <button class="btn btn-outline btn-sm" id="refreshSavedBtn">Refresh list</button>
+      </div>
+      <div id="savedQuotesList"><p class="note">Sign in with Microsoft, then click Refresh to see quotes you've saved here.</p></div>
     </div>
   </div>
 
@@ -416,16 +445,15 @@
         <p><b>Added</b> — E-signature upload (Rate Master → Company Branding). Appears once, in the signature block on the last page — it follows wherever the quote content actually ends, it doesn't repeat on every page even if the parts table itself spans several.</p>
         <p><b>Fixed</b> — Background-removed logos turning solid black on upload. The logo box was compressing everything to JPEG, which has no transparency channel — any see-through pixel got flattened to black on export. Both the logo and signature boxes now keep PNG transparency end to end.</p>
         <p><b>Added</b> — Copy-paste for the logo and signature boxes too, same as the per-part photo fields: click the box, then Ctrl+V.</p>
+        <p><b>Added</b> — Real persistence: sign in with Microsoft and quotes save to a OneDrive folder you name (Rate Master → OneDrive Storage), with a Saved Quotes tab to browse and reload them. Rate Master settings sync there too, so they survive on the deployed site, not just inside Claude.</p>
       </div>
     </div>
     <div class="card">
-      <h2>Still to build (Phase 2)</h2>
+      <h2>Still to build</h2>
       <div class="fixlist">
-        <p>— Live Microsoft sign-in: wired to your real Azure app (same as the Order Tracker) but only completes once this file is deployed to a URL registered as a redirect URI for that app — it can't finish inside this preview's sandboxed origin.</p>
-        <p>— Persisting quotes to OneDrive/SharePoint so estimators share one quote database instead of separate files — same Graph API pattern as the Order Tracker.</p>
-        <p>— Quote status tracking (Draft / Sent / Won / Lost) and searchable history/reporting across quotes.</p>
+        <p>— Quote status tracking (Draft / Sent / Won / Lost) and a proper reporting view (win rate, average margin, pipeline value) across saved quotes — right now Saved Quotes is a flat list, not a dashboard.</p>
         <p>— Excel image embedding: SheetJS (free tier, used here) can't embed real images inside .xlsx cells — the Excel export flags which rows have a photo, the image itself is only in the PDF. Real embedded thumbnails in Excel need ExcelJS instead — say so if you want that swap.</p>
-        <p id="storageExplainer">— Settings storage: while you're working inside this Claude chat, your Rate Master, branding, and PDF column choices save automatically. Once you deploy this file to your own hosting (GitHub Pages / Azure Static Web App), that Claude-only storage won't be available — settings storage there needs to move to the OneDrive backend in Phase 2.</p>
+        <p>— Multi-user awareness: with "just me" access this doesn't matter, but if other estimators start using this later, two people editing the same quote file at once will just overwrite each other — no conflict warning yet.</p>
       </div>
     </div>
   </div>
@@ -473,6 +501,7 @@ const state = {
   pdfColumns: {photo:true, rmCost:true, millTurn:true, grind:true, jig:true, cmm:true, vmc:true, ht:true, finGrind:true, wireCut:true, bench:true, sum:true, margin:true, subTotal:true, lineTotal:true},
   pdfAutoHide: true,
   marginDisplayMode: 'both',
+  oneDriveFolder: 'JMC Quotations',
   parts: [],
   extraItems: [
     {description:'Design Costing', amount:3000},
@@ -491,15 +520,24 @@ function newPart(){
 const STORAGE_KEY = 'jmc-quote-engine-settings-v3';
 const storageAvailable = (typeof window.storage !== 'undefined' && window.storage !== null);
 
+let oneDriveSyncTimer = null;
+function scheduleOneDriveSettingsSync(){
+  clearTimeout(oneDriveSyncTimer);
+  oneDriveSyncTimer = setTimeout(()=>{ saveSettingsToOneDrive(); }, 1500);
+}
 async function saveSettings(){
-  if(!storageAvailable) return;
   const payload = {
     materials: state.materials, processRates: state.processRates, stockAllowance: state.stockAllowance,
     defaultMargin: state.defaultMargin, currency: state.currency, companyLogo: state.companyLogo, eSignature: state.eSignature,
-    brandColor: state.brandColor, pdfColumns: state.pdfColumns, pdfAutoHide: state.pdfAutoHide, marginDisplayMode: state.marginDisplayMode
+    brandColor: state.brandColor, pdfColumns: state.pdfColumns, pdfAutoHide: state.pdfAutoHide, marginDisplayMode: state.marginDisplayMode,
+    oneDriveFolder: state.oneDriveFolder
   };
-  try{ await window.storage.set(STORAGE_KEY, JSON.stringify(payload), false); }
-  catch(err){ console.warn('Settings save failed', err); }
+  if(storageAvailable){
+    try{ await window.storage.set(STORAGE_KEY, JSON.stringify(payload), false); }
+    catch(err){ console.warn('Settings save failed', err); }
+  }
+  // Independent of Claude's own storage — this is what actually matters once deployed.
+  scheduleOneDriveSettingsSync();
 }
 
 async function loadSettings(){
@@ -519,7 +557,8 @@ async function loadSettings(){
         brandColor: saved.brandColor || state.brandColor,
         pdfColumns: saved.pdfColumns || state.pdfColumns,
         pdfAutoHide: (saved.pdfAutoHide !== undefined) ? saved.pdfAutoHide : state.pdfAutoHide,
-        marginDisplayMode: saved.marginDisplayMode || state.marginDisplayMode
+        marginDisplayMode: saved.marginDisplayMode || state.marginDisplayMode,
+        oneDriveFolder: saved.oneDriveFolder || state.oneDriveFolder
       });
     }
   }catch(err){ /* no saved settings yet — use defaults */ }
@@ -1240,18 +1279,225 @@ const msalConfig = {
 let msalInstance;
 try { msalInstance = new msal.PublicClientApplication(msalConfig); } catch(e){ console.warn('MSAL not loaded', e); }
 
-document.getElementById('signInBtn').addEventListener('click', async ()=>{
+async function onSignedIn(username){
   const pill = document.getElementById('authPill');
+  pill.textContent = 'Signed in: ' + username;
+  pill.classList.add('signed');
+  document.getElementById('oneDriveStatusNote').textContent = 'Signed in — quotes save to your OneDrive "'+oneDriveFolderName()+'" folder, and these settings sync there too.';
+  await loadSettingsFromOneDrive();
+  refreshSavedQuotesList();
+}
+
+document.getElementById('signInBtn').addEventListener('click', async ()=>{
   if(!msalInstance){ alert('MSAL library did not load.'); return; }
   try{
     const res = await msalInstance.loginPopup({ scopes:['User.Read','Files.ReadWrite'] });
-    pill.textContent = 'Signed in: ' + res.account.username;
-    pill.classList.add('signed');
+    await onSignedIn(res.account.username);
   }catch(err){
     console.warn(err);
     alert('Sign-in did not complete. This preview runs on a sandboxed origin that is not registered as a redirect URI for the JMC Azure app — this will work once deployed to your GitHub Pages / Azure Static Web App URL (same as the Order Tracker). See the "What Changed & Why" tab.');
   }
 });
+
+/* ================= ONEDRIVE (Microsoft Graph) ================= */
+function oneDriveFolderName(){
+  return (state.oneDriveFolder || 'JMC Quotations').trim() || 'JMC Quotations';
+}
+document.getElementById('oneDriveFolderInput').addEventListener('input', e=>{
+  state.oneDriveFolder = e.target.value; saveSettings();
+});
+
+async function getGraphToken(interactive){
+  if(!msalInstance) throw new Error('MSAL library did not load.');
+  const accounts = msalInstance.getAllAccounts();
+  if(!accounts.length){ const err = new Error('Sign in with Microsoft first.'); err.code = 'NOT_SIGNED_IN'; throw err; }
+  const req = {scopes:['Files.ReadWrite'], account: accounts[0]};
+  try{
+    const res = await msalInstance.acquireTokenSilent(req);
+    return res.accessToken;
+  }catch(err){
+    if(!interactive) throw err;
+    const res = await msalInstance.acquireTokenPopup(req);
+    return res.accessToken;
+  }
+}
+
+async function ensureOneDriveFolder(token){
+  const folder = oneDriveFolderName();
+  const checkUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(folder)}`;
+  const checkRes = await fetch(checkUrl, {headers:{Authorization:`Bearer ${token}`}});
+  if(checkRes.status === 404){
+    const createRes = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root/children`, {
+      method:'POST',
+      headers:{Authorization:`Bearer ${token}`, 'Content-Type':'application/json'},
+      body: JSON.stringify({ name: folder, folder: {}, '@microsoft.graph.conflictBehavior': 'rename' })
+    });
+    if(!createRes.ok) throw new Error('Could not create the OneDrive folder (status '+createRes.status+').');
+  } else if(!checkRes.ok){
+    throw new Error('Could not reach OneDrive (status '+checkRes.status+').');
+  }
+}
+
+async function uploadJsonToOneDrive(token, fileName, dataObj){
+  const folder = oneDriveFolderName();
+  const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(folder)}/${encodeURIComponent(fileName)}:/content`;
+  const res = await fetch(url, {
+    method:'PUT',
+    headers:{Authorization:`Bearer ${token}`, 'Content-Type':'application/json'},
+    body: JSON.stringify(dataObj, null, 2)
+  });
+  if(!res.ok) throw new Error('Upload to OneDrive failed (status '+res.status+').');
+  return res.json();
+}
+
+async function listOneDriveQuotes(token){
+  const folder = oneDriveFolderName();
+  const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(folder)}:/children?$orderby=lastModifiedDateTime desc&$top=200`;
+  const res = await fetch(url, {headers:{Authorization:`Bearer ${token}`}});
+  if(res.status === 404) return []; // folder not created yet
+  if(!res.ok) throw new Error('Could not list saved quotes (status '+res.status+').');
+  const json = await res.json();
+  return (json.value||[]).filter(f=>f.name.endsWith('.json') && f.name !== '_settings.json');
+}
+
+async function downloadOneDriveItem(item){
+  const url = item['@microsoft.graph.downloadUrl'];
+  if(!url) throw new Error('No download link on this file.');
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('Download failed (status '+res.status+').');
+  return res.json();
+}
+
+function settingsPayload(){
+  return {
+    materials: state.materials, processRates: state.processRates, stockAllowance: state.stockAllowance,
+    defaultMargin: state.defaultMargin, currency: state.currency, companyLogo: state.companyLogo, eSignature: state.eSignature,
+    brandColor: state.brandColor, pdfColumns: state.pdfColumns, pdfAutoHide: state.pdfAutoHide, marginDisplayMode: state.marginDisplayMode
+  };
+}
+function applySettingsPayload(saved){
+  Object.assign(state, {
+    materials: saved.materials || state.materials,
+    processRates: saved.processRates || state.processRates,
+    stockAllowance: saved.stockAllowance ?? state.stockAllowance,
+    defaultMargin: saved.defaultMargin ?? state.defaultMargin,
+    currency: saved.currency || state.currency,
+    companyLogo: (saved.companyLogo !== undefined) ? saved.companyLogo : state.companyLogo,
+    eSignature: (saved.eSignature !== undefined) ? saved.eSignature : state.eSignature,
+    brandColor: saved.brandColor || state.brandColor,
+    pdfColumns: saved.pdfColumns || state.pdfColumns,
+    pdfAutoHide: (saved.pdfAutoHide !== undefined) ? saved.pdfAutoHide : state.pdfAutoHide,
+    marginDisplayMode: saved.marginDisplayMode || state.marginDisplayMode
+  });
+  renderMaterials(); renderProcessRates(); renderPdfColumnToggles();
+  document.getElementById('pdfAutoHide').checked = state.pdfAutoHide;
+  document.getElementById('marginDisplayMode').value = state.marginDisplayMode;
+  renderBranding(); renderPartsMaterialOptions(); recalcReadouts();
+}
+
+async function saveSettingsToOneDrive(){
+  try{
+    const token = await getGraphToken(false);
+    await ensureOneDriveFolder(token);
+    await uploadJsonToOneDrive(token, '_settings.json', settingsPayload());
+  }catch(err){ /* not signed in yet, or a transient network issue — Claude-preview storage still covers this session */ }
+}
+async function loadSettingsFromOneDrive(){
+  try{
+    const token = await getGraphToken(false);
+    const folder = oneDriveFolderName();
+    const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(folder)}/_settings.json:/content`;
+    const res = await fetch(url, {headers:{Authorization:`Bearer ${token}`}});
+    if(res.ok){ applySettingsPayload(await res.json()); }
+  }catch(err){ /* no settings saved to OneDrive yet — keep current defaults */ }
+}
+document.getElementById('syncSettingsBtn').addEventListener('click', async ()=>{
+  const btn = document.getElementById('syncSettingsBtn');
+  const orig = btn.textContent; btn.textContent = 'Syncing…'; btn.disabled = true;
+  try{
+    const token = await getGraphToken(true);
+    await ensureOneDriveFolder(token);
+    await uploadJsonToOneDrive(token, '_settings.json', settingsPayload());
+    document.getElementById('oneDriveStatusNote').textContent = 'Settings synced to OneDrive just now.';
+  }catch(err){
+    alert(err.code==='NOT_SIGNED_IN' ? 'Sign in with Microsoft first (top right).' : 'Could not sync settings: '+err.message);
+  }finally{ btn.textContent = orig; btn.disabled = false; }
+});
+
+function collectQuoteData(){
+  return {
+    quoteNo: document.getElementById('qQuoteNo').value,
+    partNo: document.getElementById('qPartNo').value,
+    partName: document.getElementById('qPartName').value,
+    operation: document.getElementById('qOperation').value,
+    customer: document.getElementById('qCustomer').value,
+    date: document.getElementById('qDate').value,
+    margin: document.getElementById('qMargin').value,
+    validity: document.getElementById('qValidity').value,
+    parts: state.parts,
+    extraItems: state.extraItems,
+    savedAt: new Date().toISOString()
+  };
+}
+function applyQuoteData(q){
+  document.getElementById('qQuoteNo').value = q.quoteNo || '';
+  document.getElementById('qPartNo').value = q.partNo || '';
+  document.getElementById('qPartName').value = q.partName || '';
+  document.getElementById('qOperation').value = q.operation || '';
+  document.getElementById('qCustomer').value = q.customer || '';
+  document.getElementById('qDate').value = q.date || '';
+  document.getElementById('qMargin').value = q.margin || state.defaultMargin;
+  document.getElementById('qValidity').value = q.validity || 15;
+  state.parts = q.parts || [];
+  state.extraItems = q.extraItems || [];
+  renderParts(); renderExtras();
+}
+
+document.getElementById('saveQuoteBtn').addEventListener('click', async ()=>{
+  const btn = document.getElementById('saveQuoteBtn');
+  const qn = document.getElementById('qQuoteNo').value.trim();
+  if(!qn){ alert('Enter a Quote No. before saving.'); return; }
+  const orig = btn.textContent; btn.textContent = 'Saving…'; btn.disabled = true;
+  try{
+    const token = await getGraphToken(true);
+    await ensureOneDriveFolder(token);
+    await uploadJsonToOneDrive(token, qn + '.json', collectQuoteData());
+    alert('Saved "'+qn+'" to your OneDrive "'+oneDriveFolderName()+'" folder.');
+    refreshSavedQuotesList();
+  }catch(err){
+    alert(err.code==='NOT_SIGNED_IN' ? 'Sign in with Microsoft first (top right), then try saving again.' : 'Could not save to OneDrive: '+err.message);
+  }finally{ btn.textContent = orig; btn.disabled = false; }
+});
+
+async function refreshSavedQuotesList(){
+  const box = document.getElementById('savedQuotesList');
+  box.innerHTML = '<p class="note">Loading…</p>';
+  try{
+    const token = await getGraphToken(false);
+    const items = await listOneDriveQuotes(token);
+    if(!items.length){ box.innerHTML = '<p class="note">No saved quotes yet in "'+oneDriveFolderName()+'". Save one from the Quote Builder tab.</p>'; return; }
+    box.innerHTML = '';
+    items.forEach(item=>{
+      const row = document.createElement('div');
+      row.className = 'saved-quote-row';
+      const modified = new Date(item.lastModifiedDateTime).toLocaleString('en-IN');
+      row.innerHTML = `<div><b>${item.name.replace(/\.json$/,'')}</b><br><span class="note" style="margin:0;">Saved ${modified}</span></div><button class="btn btn-outline btn-sm">Load</button>`;
+      row.querySelector('button').addEventListener('click', async ()=>{
+        try{
+          const data = await downloadOneDriveItem(item);
+          applyQuoteData(data);
+          document.querySelector('.tab[data-tab="quote"]').click();
+        }catch(err){ alert('Could not load this quote: '+err.message); }
+      });
+      box.appendChild(row);
+    });
+  }catch(err){
+    box.innerHTML = err.code==='NOT_SIGNED_IN'
+      ? '<p class="note">Sign in with Microsoft (top right) to see quotes saved here.</p>'
+      : '<p class="note">Could not load saved quotes: '+err.message+'</p>';
+  }
+}
+document.getElementById('refreshSavedBtn').addEventListener('click', refreshSavedQuotesList);
 
 /* ================= INIT ================= */
 async function init(){
@@ -1259,12 +1505,12 @@ async function init(){
   const storageNote = document.getElementById('storageNote');
   if(storageAvailable){
     await loadSettings();
-    storagePill.textContent = 'Settings auto-save: on';
-    storageNote.textContent = 'Logo, rates and PDF column choices save automatically in this Claude session and reload next time you open this tool here.';
+    storagePill.textContent = 'Settings auto-save: on (Claude)';
+    storageNote.textContent = 'Inside this Claude chat, logo/rates/PDF choices save automatically here too — but sign in with Microsoft (top right) so they (and your quotes) also save to OneDrive, which is what carries over once this is deployed.';
   } else {
     storagePill.textContent = 'Settings auto-save: off (standalone file)';
     storagePill.classList.add('storage-off');
-    storageNote.textContent = "This copy is running outside Claude's preview, so nothing here persists automatically between visits yet — that lands with the OneDrive backend in Phase 2. Re-upload your logo/rates if you reopen the file fresh.";
+    storageNote.textContent = "This copy is running outside Claude's preview, so nothing saves here automatically unless you're signed in with Microsoft — then it saves to your OneDrive folder instead. Sign in (top right) to pick that back up.";
   }
   document.getElementById('qDate').value = new Date().toISOString().slice(0,10);
   state.parts.push(newPart(), newPart());
@@ -1273,9 +1519,17 @@ async function init(){
   renderPdfColumnToggles();
   document.getElementById('pdfAutoHide').checked = state.pdfAutoHide;
   document.getElementById('marginDisplayMode').value = state.marginDisplayMode;
+  document.getElementById('oneDriveFolderInput').value = state.oneDriveFolder;
   renderBranding();
   renderExtras();
   renderParts();
+
+  // If the browser still has a cached Microsoft session (e.g. a page refresh, not a fresh visit),
+  // pick it back up without making the person click "Sign in" again.
+  if(msalInstance){
+    const accounts = msalInstance.getAllAccounts();
+    if(accounts.length){ await onSignedIn(accounts[0].username); }
+  }
 }
 init();
 </script>
