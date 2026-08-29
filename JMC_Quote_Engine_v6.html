@@ -1,0 +1,1279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JMC Quote Engine</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/msal/2.38.3/msal-browser.min.js"></script>
+<style>
+  :root{
+    --graphite-950:#14181d;
+    --graphite-900:#1b2128;
+    --graphite-800:#252c35;
+    --steel-line:#3d4750;
+    --paper:#f3f1ea;
+    --paper-panel:#ffffff;
+    --ink:#1b2128;
+    --ink-soft:#5b6470;
+    --brass:#003393;
+    --brass-dark:#00256a;
+    --brass-light:#597ab9;
+    --ok:#4c7a52;
+    --warn:#b3502b;
+    --mono: 'IBM Plex Mono','SF Mono',Consolas,'Courier New',monospace;
+    --sans: Inter,-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink); font-family:var(--sans);
+    background-image:
+      linear-gradient(var(--steel-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--steel-line) 1px, transparent 1px);
+    background-size:34px 34px; background-position:-1px -1px;
+    background-attachment:local;
+  }
+  .app{max-width:1440px;margin:0 auto;padding:0 20px 60px;}
+
+  header.topbar{
+    background:var(--graphite-900); color:#f3f1ea; padding:16px 24px;
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    border-bottom:3px solid var(--brass); margin-bottom:22px;
+  }
+  .brand{display:flex; align-items:center; gap:12px;}
+  .logo-badge{
+    width:44px;height:44px;border-radius:6px;background:linear-gradient(135deg,var(--brass-light),var(--brass) 55%,var(--brass-dark));
+    display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:700;color:#fff;letter-spacing:-1px;font-size:15px;
+    box-shadow: inset 0 0 0 2px rgba(20,24,29,.25); overflow:hidden;
+  }
+  .logo-badge img{width:100%;height:100%;object-fit:contain;background:#fff;}
+  .brand-text .name{font-weight:700;font-size:15px;letter-spacing:.02em;}
+  .brand-text .tag{font-size:11px;color:#b7bfc9;letter-spacing:.08em;text-transform:uppercase;font-family:var(--mono);}
+  .auth-area{display:flex;align-items:center;gap:10px;font-size:12.5px;}
+  .btn{
+    font-family:var(--sans); font-weight:600; font-size:13px; border-radius:5px; border:1px solid transparent;
+    padding:9px 14px; cursor:pointer; transition:.12s ease; display:inline-flex; align-items:center; gap:7px;
+  }
+  .btn-brass{background:var(--brass); color:#fff; border-color:var(--brass-dark);}
+  .btn-brass:hover{background:var(--brass-dark); color:#fff;}
+  .btn-ghost{background:transparent;border-color:#4a5563;color:#e7e9ec;}
+  .btn-ghost:hover{border-color:#8b95a3;}
+  .btn-outline{background:var(--paper-panel);border-color:var(--steel-line);color:var(--ink);}
+  .btn-outline:hover{border-color:var(--brass);color:var(--brass-dark);}
+  .btn-sm{padding:5px 9px;font-size:12px;}
+  .pill{font-family:var(--mono);font-size:11px;padding:3px 8px;border-radius:20px;background:#2c3540;color:#c9d0d8;}
+  .pill.signed{background:#25422b;color:#bfe6c4;}
+  .pill.storage-off{background:#4a3320;color:#f0c896;}
+
+  .tabs{display:flex;gap:6px;margin-bottom:18px;border-bottom:2px solid var(--steel-line); flex-wrap:wrap;}
+  .tab{
+    font-family:var(--mono); font-size:12.5px; letter-spacing:.03em; text-transform:uppercase;
+    padding:10px 16px; cursor:pointer; color:var(--ink-soft); border-bottom:2px solid transparent; margin-bottom:-2px;
+  }
+  .tab.active{color:var(--ink); border-bottom-color:var(--brass); font-weight:700;}
+  .panel{display:none;}
+  .panel.active{display:block;}
+
+  .card{background:var(--paper-panel); border:1px solid var(--steel-line); border-radius:8px; padding:18px 20px; margin-bottom:18px;}
+  .card h2{font-size:13px; text-transform:uppercase; letter-spacing:.06em; font-family:var(--mono); margin:0 0 14px; color:var(--brass-dark); display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;}
+  .card h2 .sub{font-family:var(--sans);font-weight:400;font-size:11.5px;color:var(--ink-soft);text-transform:none;letter-spacing:0;}
+  .grid{display:grid; gap:12px;}
+  .grid.cols-4{grid-template-columns:repeat(4,1fr);}
+  .grid.cols-3{grid-template-columns:repeat(3,1fr);}
+  .grid.cols-2{grid-template-columns:repeat(2,1fr);}
+  label{display:block;font-size:11px;color:var(--ink-soft);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.03em;}
+  input,select{
+    width:100%; font-family:var(--sans); font-size:13px; padding:7px 9px; border:1px solid var(--steel-line);
+    border-radius:4px; background:#fff; color:var(--ink);
+  }
+  input:focus,select:focus{outline:none;border-color:var(--brass);box-shadow:0 0 0 3px rgba(185,121,63,.15);}
+  input[type=number]{font-family:var(--mono);}
+  input[type=color]{padding:2px;height:36px;cursor:pointer;}
+
+  table.rt{width:100%; border-collapse:collapse; font-size:12.5px;}
+  table.rt th{
+    background:var(--graphite-900); color:#e7e9ec; font-family:var(--mono); font-weight:600; font-size:11px;
+    text-transform:uppercase; letter-spacing:.03em; padding:8px 8px; text-align:left;
+  }
+  table.rt td{padding:6px 7px; border-bottom:1px solid #e5e2d8; vertical-align:middle;}
+  table.rt tr:hover td{background:#faf8f2;}
+  table.rt input, table.rt select{padding:5px 6px;font-size:12.5px;}
+  .num{font-family:var(--mono); text-align:right;}
+  .del-btn{background:none;border:1px solid var(--steel-line);color:var(--warn);border-radius:4px;width:26px;height:26px;cursor:pointer;font-size:14px;line-height:1;}
+  .del-btn:hover{background:var(--warn);color:#fff;border-color:var(--warn);}
+  .add-row{margin-top:10px;}
+
+  .quote-meta{display:grid; grid-template-columns:repeat(4,1fr); gap:12px;}
+
+  .parts-scroll{overflow-x:auto; border:1px solid var(--steel-line); border-radius:6px; position:relative;}
+  table.parts{width:100%; border-collapse:collapse; font-size:12px; min-width:1700px;}
+  table.parts thead th{
+    background:var(--graphite-900); color:#e7e9ec; font-family:var(--mono); font-weight:600; font-size:10.5px;
+    text-transform:uppercase; padding:8px 6px; text-align:center; white-space:nowrap; border-right:1px solid #3d4750;
+  }
+  table.parts thead th.grp-mat{background:#3a3122;}
+  table.parts thead th.grp-proc{background:#22303a;}
+  table.parts thead th.grp-out{background:#2c2222;}
+  table.parts tbody td{padding:5px 5px; border-bottom:1px solid #e5e2d8; border-right:1px solid #eee9dc; white-space:nowrap;}
+  table.parts tbody tr:nth-child(even){background:#faf8f2;}
+  table.parts input, table.parts select{width:100%; min-width:58px; padding:5px 6px; font-size:12px;}
+  table.parts .desc-cell input{min-width:140px;}
+  table.parts .readout{font-family:var(--mono); text-align:right; padding-right:8px; color:var(--ink);}
+  table.parts .readout.hi{font-weight:700; color:var(--brass-dark);}
+  table.parts .badge-shape{font-family:var(--mono);font-size:10px;padding:2px 5px;border-radius:3px;background:#eee;}
+
+  /* frozen columns: S.No, Photo, Description, Shape, Material.
+     thead row 2 (Dia/T/W/L...) has its OWN nth-child count starting at 1 because the rowspan
+     cells from row 1 don't repeat there — so freezing by nth-child mismatches row1 vs row2.
+     Explicit classes on the row-1 header cells avoid that; tbody rows have no rowspan so
+     nth-child stays safe there. */
+  table.parts th.freeze-sno, table.parts td:nth-child(1){position:sticky; left:0; width:40px; min-width:40px;}
+  table.parts th.freeze-photo, table.parts td:nth-child(2){position:sticky; left:40px; width:60px; min-width:60px;}
+  table.parts th.freeze-desc, table.parts td:nth-child(3){position:sticky; left:100px; width:150px; min-width:150px;}
+  table.parts th.freeze-shape, table.parts td:nth-child(4){position:sticky; left:250px; width:72px; min-width:72px;}
+  table.parts th.freeze-material, table.parts td:nth-child(5){position:sticky; left:322px; width:96px; min-width:96px; border-right:2px solid var(--brass);}
+  table.parts tbody td:nth-child(-n+5){background:var(--paper-panel); z-index:2;}
+  table.parts tbody tr:nth-child(even) td:nth-child(-n+5){background:#faf8f2;}
+  table.parts thead th.freeze-sno, table.parts thead th.freeze-photo, table.parts thead th.freeze-desc,
+  table.parts thead th.freeze-shape, table.parts thead th.freeze-material{z-index:3; background:var(--graphite-900);}
+
+  .proc-input.auto-mode{background:#fbf6ec;}
+  .auto-tag{font-family:var(--mono);font-size:8.5px;color:var(--brass-dark);display:block;text-align:center;}
+
+  .photo-cell{width:60px;}
+  .photo-box{
+    width:56px;height:42px;border:1.5px dashed var(--steel-line);border-radius:5px;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;background:#fbfaf6;
+    font-family:var(--mono);font-size:8.5px;color:var(--ink-soft);text-align:center;line-height:1.25;
+    position:relative;overflow:hidden;white-space:normal;padding:2px;
+  }
+  .photo-box:focus{outline:none;border-color:var(--brass);box-shadow:0 0 0 3px rgba(185,121,63,.18);}
+  .photo-box.has-img{border-style:solid;padding:0;}
+  .photo-box img{width:100%;height:100%;object-fit:cover;display:block;}
+  .photo-box .clear-photo{
+    position:absolute;top:1px;right:1px;background:rgba(20,24,29,.75);color:#fff;border:none;
+    width:15px;height:15px;border-radius:3px;font-size:11px;line-height:1;cursor:pointer;display:none;
+  }
+  .photo-box.has-img:hover .clear-photo{display:block;}
+  .lightbox{
+    display:none;position:fixed;inset:0;background:rgba(20,24,29,.82);z-index:50;
+    align-items:center;justify-content:center;cursor:zoom-out;
+  }
+  .lightbox.open{display:flex;}
+  .lightbox img{max-width:88vw;max-height:86vh;border-radius:6px;box-shadow:0 12px 40px rgba(0,0,0,.5);}
+
+  .toolbar{display:flex; gap:8px; margin:12px 0; flex-wrap:wrap;}
+  .extra-row{display:grid; grid-template-columns:1fr 160px 34px; gap:8px; margin-bottom:6px; align-items:center;}
+
+  .totals-card{
+    background:var(--graphite-900); color:#f3f1ea; border-radius:8px; padding:18px 22px; margin-top:6px;
+    display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;
+  }
+  .totals-card .label{font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:#b7bfc9;}
+  .totals-card .grand{font-family:var(--mono); font-size:30px; font-weight:700; color:var(--brass-light);}
+  .totals-breakdown{display:flex; gap:22px; font-family:var(--mono); font-size:12px; color:#c9d0d8;}
+  .note{font-size:11.5px; color:var(--ink-soft); margin-top:8px; line-height:1.5;}
+  .fixlist{font-size:12.5px; line-height:1.7;}
+  .fixlist b{color:var(--ok);}
+
+  .col-toggle-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:8px 16px;}
+  .col-toggle{display:flex; align-items:center; gap:7px; font-size:12.5px;}
+  .col-toggle input{width:auto;}
+  .col-toggle.locked{opacity:.55;}
+
+  .branding-row{display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap;}
+  .logo-preview{width:120px;height:80px;border:1.5px dashed var(--steel-line);border-radius:6px;display:flex;align-items:center;justify-content:center;background:#fbfaf6;overflow:hidden;cursor:pointer;}
+  .logo-preview:focus{outline:none;border-color:var(--brass);box-shadow:0 0 0 3px rgba(185,121,63,.18);}
+  .logo-preview img{max-width:100%;max-height:100%;object-fit:contain;}
+  .logo-preview.empty{font-family:var(--mono);font-size:10px;color:var(--ink-soft);text-align:center;padding:6px;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo-badge" id="headerLogoBadge">JMC</div>
+      <div class="brand-text">
+        <div class="name">JMC Engineering — Quote Engine</div>
+        <div class="tag">Padi · Chennai · Precision Tooling</div>
+      </div>
+    </div>
+    <div class="auth-area">
+      <span id="storagePill" class="pill">Checking storage…</span>
+      <span id="authPill" class="pill">Not signed in</span>
+      <button class="btn btn-ghost btn-sm" id="signInBtn">Sign in with Microsoft</button>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="ratemaster">Rate Master</div>
+    <div class="tab" data-tab="quote">Quote Builder</div>
+    <div class="tab" data-tab="notes">What Changed &amp; Why</div>
+  </div>
+
+  <!-- RATE MASTER -->
+  <div class="panel active" id="panel-ratemaster">
+
+    <div class="card">
+      <h2>Company Branding</h2>
+      <div class="branding-row">
+        <div>
+          <label>Logo</label>
+          <div class="logo-preview empty" id="logoPreview" tabindex="0" title="Click, then paste (Ctrl+V) an image">No logo uploaded<br>(placeholder badge used)</div>
+        </div>
+        <div style="flex:1;min-width:220px;">
+          <label>Upload logo (PNG/JPG) — or click the box and paste (Ctrl+V)</label>
+          <input type="file" id="logoUpload" accept="image/*">
+          <button class="btn btn-outline btn-sm" style="margin-top:8px;" id="clearLogoBtn">Remove logo</button>
+        </div>
+        <div style="width:160px;">
+          <label>Brand accent color</label>
+          <input type="color" id="brandColorInput" value="#003393">
+        </div>
+      </div>
+      <div class="branding-row" style="margin-top:18px; padding-top:18px; border-top:1px solid #eee9dc;">
+        <div>
+          <label>E-signature</label>
+          <div class="logo-preview empty" id="signaturePreview" tabindex="0" title="Click, then paste (Ctrl+V) an image">No signature uploaded<br>(blank space left in PDF)</div>
+        </div>
+        <div style="flex:1;min-width:220px;">
+          <label>Upload signature — or click the box and paste (Ctrl+V)</label>
+          <input type="file" id="signatureUpload" accept="image/*">
+          <button class="btn btn-outline btn-sm" style="margin-top:8px;" id="clearSignatureBtn">Remove signature</button>
+          <p class="note">Both boxes keep transparency (PNG) — if you've cut the background out in an editor and copied the result, paste it straight in; it won't turn black like a JPEG re-save would.</p>
+          <p class="note">Placed once, in the "Authorized Signatory" block at the very end of the PDF — not repeated on every page, even if the parts table itself spans several pages.</p>
+        </div>
+      </div>
+      <p class="note" id="storageNote"></p>
+    </div>
+
+    <div class="card">
+      <h2>Materials</h2>
+      <table class="rt" id="materialsTable">
+        <thead><tr><th style="width:20%">Material / Grade</th><th style="width:15%">Rate (₹/kg)</th><th style="width:15%">Density (g/cm³)</th><th style="width:15%">HT Rate (₹/kg)</th><th style="width:24%">Notes</th><th style="width:11%"></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <button class="btn btn-outline btn-sm add-row" id="addMaterialBtn">+ Add material</button>
+      <p class="note">HT Rate is used when Heat Treatment is set to Auto in Process Rates below — since hardening cost genuinely differs by grade, it's priced per material instead of one flat rate. Starting numbers here are placeholders — set your real per-material HT rates.</p>
+    </div>
+
+    <div class="card">
+      <h2>Process Rates <span class="sub">Set a process to Auto to price it from weight × ₹/kg, like Heat Treatment usually is — instead of typing it per part every time</span></h2>
+      <table class="rt" id="processRatesTable">
+        <thead><tr><th style="width:30%">Process</th><th style="width:25%">Mode</th><th style="width:25%">Rate (₹/kg, if Auto)</th><th style="width:20%">Notes</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Costing Rules</h2>
+      <div class="grid cols-3">
+        <div>
+          <label>Stock allowance per dimension (mm)</label>
+          <input type="number" id="stockAllowance" value="5" step="0.5">
+        </div>
+        <div>
+          <label>Default profit margin (%)</label>
+          <input type="number" id="defaultMargin" value="15" step="1">
+        </div>
+        <div>
+          <label>Currency symbol</label>
+          <input type="text" id="currencySymbol" value="₹">
+        </div>
+      </div>
+      <div class="grid cols-3" style="margin-top:12px;">
+        <div>
+          <label>Show margin as</label>
+          <select id="marginDisplayMode">
+            <option value="both">Amount + Percent</option>
+            <option value="amount">Amount only</option>
+            <option value="percent">Percent only</option>
+          </select>
+        </div>
+      </div>
+      <p class="note">Block-shape weight = (T+allowance) × (W+allowance) × (L+allowance) × density / 1,000,000.
+      Round-shape weight = π × ((DIA+allowance)/2)² × (Length+allowance) × density / 1,000,000. Standard/bought-out parts skip weight entirely and use a direct unit price.</p>
+    </div>
+
+    <div class="card">
+      <h2>PDF Export Columns <span class="sub">Set your defaults once — the PDF export always follows these, quote to quote</span></h2>
+      <div class="col-toggle-grid" id="pdfColumnToggles"></div>
+      <label style="margin-top:14px;display:flex;align-items:center;gap:7px;">
+        <input type="checkbox" id="pdfAutoHide" style="width:auto;" checked>
+        <span style="font-family:var(--sans);text-transform:none;font-size:12.5px;color:var(--ink);">Also hide a column automatically if every part in this quote has zero/blank for it</span>
+      </label>
+    </div>
+  </div>
+
+  <!-- QUOTE BUILDER -->
+  <div class="panel" id="panel-quote">
+    <div class="card">
+      <h2>Quote Header</h2>
+      <div class="quote-meta">
+        <div><label>Quote No.</label><input type="text" id="qQuoteNo" placeholder="EW-2900"></div>
+        <div><label>Part No.</label><input type="text" id="qPartNo" placeholder="204-00099"></div>
+        <div><label>Part Name</label><input type="text" id="qPartName" placeholder="e.g. TILT BRACKET"></div>
+        <div><label>Operation</label><input type="text" id="qOperation" placeholder="e.g. POSITION GAUGE"></div>
+        <div><label>Customer</label><input type="text" id="qCustomer" placeholder="e.g. Rane Group"></div>
+        <div><label>Date</label><input type="date" id="qDate"></div>
+        <div><label>Quote margin % (row default)</label><input type="number" id="qMargin" value="15"></div>
+        <div><label>Validity (days)</label><input type="number" id="qValidity" value="15"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Parts <span class="sub">First five columns stay put while you scroll right</span></h2>
+      <div class="parts-scroll">
+        <table class="parts" id="partsTable">
+          <thead>
+            <tr>
+              <th rowspan="2" class="freeze-sno">S.No</th>
+              <th rowspan="2" class="freeze-photo">Photo</th>
+              <th rowspan="2" class="freeze-desc">Description</th>
+              <th rowspan="2" class="freeze-shape">Shape</th>
+              <th rowspan="2" class="freeze-material">Material</th>
+              <th class="grp-mat" colspan="4">Dimensions (mm)</th>
+              <th rowspan="2">Qty</th>
+              <th class="grp-out" rowspan="2">Weight (kg)</th>
+              <th class="grp-out" rowspan="2">RM Cost</th>
+              <th class="grp-proc" colspan="9">Process Costs</th>
+              <th class="grp-out" rowspan="2">Sum</th>
+              <th class="grp-out" rowspan="2">Margin</th>
+              <th class="grp-out" rowspan="2">Sub Total /pc</th>
+              <th class="grp-out" rowspan="2">Line Total</th>
+              <th rowspan="2"></th>
+            </tr>
+            <tr>
+              <th class="grp-mat">Dia</th><th class="grp-mat">T</th><th class="grp-mat">W</th><th class="grp-mat">L</th>
+              <th class="grp-proc">Mill/Turn</th><th class="grp-proc">Grind</th><th class="grp-proc">Jig B/G</th>
+              <th class="grp-proc">CMM</th><th class="grp-proc">VMC</th><th class="grp-proc">HT</th>
+              <th class="grp-proc">Fin. Grind</th><th class="grp-proc">Wire Cut</th><th class="grp-proc">Bench</th>
+            </tr>
+          </thead>
+          <tbody id="partsBody"></tbody>
+        </table>
+      </div>
+      <div class="toolbar">
+        <button class="btn btn-outline btn-sm" id="addPartBtn">+ Add part</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Extra Line Items <span class="sub">Design costing, assembly &amp; transport, etc.</span></h2>
+      <div id="extraItemsBody"></div>
+      <button class="btn btn-outline btn-sm add-row" id="addExtraBtn">+ Add line item</button>
+    </div>
+
+    <div class="totals-card">
+      <div>
+        <div class="label">Grand Total</div>
+        <div class="grand" id="grandTotalDisplay">₹0</div>
+      </div>
+      <div class="totals-breakdown">
+        <div><span class="label">Parts</span><br><span id="partsSubtotal">₹0</span></div>
+        <div><span class="label">Extras</span><br><span id="extraSubtotal">₹0</span></div>
+        <div><span class="label">Line items</span><br><span id="partCount">0</span></div>
+      </div>
+      <div class="toolbar" style="margin:0;">
+        <button class="btn btn-brass" id="exportPdfBtn">Export PDF (client copy)</button>
+        <button class="btn btn-outline" id="exportXlsxBtn" style="background:#fff;">Export Excel (full working file)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- NOTES -->
+  <div class="panel" id="panel-notes">
+    <div class="card">
+      <h2>Fixed vs. the original workbook</h2>
+      <div class="fixlist">
+        <p><b>Fixed</b> — Material cost (RM Cost) now flows into Sum → Margin → Sub Total → Grand Total.</p>
+        <p><b>Fixed</b> — One weight formula, applied consistently, configurable in Rate Master.</p>
+        <p><b>Fixed</b> — Round-stock parts get a real cylindrical volume calc instead of a zeroed rectangular formula.</p>
+        <p><b>Fixed</b> — Bought-out/standard parts get their own direct-price costing path.</p>
+        <p><b>Fixed</b> — Profit margin is one visible, editable field per quote instead of silently varying 15–20% across sheets.</p>
+        <p><b>Fixed</b> — Heat Treatment (and any process you choose) can now price itself automatically from weight × ₹/kg via Process Rates, instead of being retyped per part.</p>
+        <p><b>Fixed</b> — Typing in any part row no longer rebuilds the whole table, so the cursor stays put and horizontal scroll position no longer resets.</p>
+        <p><b>Fixed</b> — First five columns (S.No → Material) stay frozen while scrolling through the process-cost columns.</p>
+        <p><b>Fixed</b> — PDF export is landscape, with a configurable column set (Rate Master → PDF Export Columns) and your real logo once uploaded.</p>
+        <p><b>Fixed</b> — Frozen-column header no longer overlaps Description/Shape — the sticky CSS was matching the wrong header row (the Dia/T/W/L sub-header has its own column count once S.No–Material's rowspan cells are excluded).</p>
+        <p><b>Fixed</b> — PDF now has light column gridlines, stretches to use the full landscape width instead of leaving the right side blank, and adds a signature block.</p>
+        <p><b>Fixed</b> — Grand Total in the PDF was showing a garbled character instead of ₹ — jsPDF's built-in font has no ₹ glyph. It now prints "Rs." in PDF output (still ₹ on-screen, where it renders fine).</p>
+        <p><b>Fixed</b> — Margin can now display as amount, percent, or both — your choice, in Rate Master → Costing Rules, applied everywhere (app + PDF).</p>
+        <p><b>Fixed</b> — Auto-calculated process costs (like HT) round up to the next ₹10 instead of landing on odd numbers — 41 becomes 50, not 40.</p>
+        <p><b>Fixed</b> — Auto-calculated fields are still editable per part now — type over the greyed "auto" placeholder to override just that line item; leave it blank to keep the automatic value.</p>
+        <p><b>Fixed</b> — Default brand color and logo now match your actual JMC Engineering logo (navy blue) instead of a generic amber guess.</p>
+        <p><b>Fixed</b> — Logo swapped to your white-on-navy version so it blends into the dark header bar instead of sitting in a visible white box.</p>
+        <p><b>Fixed</b> — Heat Treatment auto-pricing now uses each material's own HT rate (Materials table) instead of one flat rate for every grade — hardening OHNS genuinely doesn't cost the same as hardening MS.</p>
+        <p><b>Fixed</b> — "JMC ENGINEERING" title in the PDF header is now white — it was rendering in navy brand-color text on a navy header band, nearly invisible.</p>
+        <p><b>Fixed</b> — Margin column in the PDF table had the same broken-₹-glyph bug as the old Grand Total — fixed the same way, by dropping the currency symbol there to match every other numeric column in that table.</p>
+        <p><b>Added</b> — E-signature upload (Rate Master → Company Branding). Appears once, in the signature block on the last page — it follows wherever the quote content actually ends, it doesn't repeat on every page even if the parts table itself spans several.</p>
+        <p><b>Fixed</b> — Background-removed logos turning solid black on upload. The logo box was compressing everything to JPEG, which has no transparency channel — any see-through pixel got flattened to black on export. Both the logo and signature boxes now keep PNG transparency end to end.</p>
+        <p><b>Added</b> — Copy-paste for the logo and signature boxes too, same as the per-part photo fields: click the box, then Ctrl+V.</p>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Still to build (Phase 2)</h2>
+      <div class="fixlist">
+        <p>— Live Microsoft sign-in: wired to your real Azure app (same as the Order Tracker) but only completes once this file is deployed to a URL registered as a redirect URI for that app — it can't finish inside this preview's sandboxed origin.</p>
+        <p>— Persisting quotes to OneDrive/SharePoint so estimators share one quote database instead of separate files — same Graph API pattern as the Order Tracker.</p>
+        <p>— Quote status tracking (Draft / Sent / Won / Lost) and searchable history/reporting across quotes.</p>
+        <p>— Excel image embedding: SheetJS (free tier, used here) can't embed real images inside .xlsx cells — the Excel export flags which rows have a photo, the image itself is only in the PDF. Real embedded thumbnails in Excel need ExcelJS instead — say so if you want that swap.</p>
+        <p id="storageExplainer">— Settings storage: while you're working inside this Claude chat, your Rate Master, branding, and PDF column choices save automatically. Once you deploy this file to your own hosting (GitHub Pages / Azure Static Web App), that Claude-only storage won't be available — settings storage there needs to move to the OneDrive backend in Phase 2.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="lightbox" id="lightbox"><img id="lightboxImg" src=""></div>
+
+<script>
+const DEFAULT_JMC_LOGO = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAQDAwMDAgQDAwMEBAQFBgoGBgUFBgwICQcKDgwPDg4MDQ0PERYTDxAVEQ0NExoTFRcYGRkZDxIbHRsYHRYYGRj/2wBDAQQEBAYFBgsGBgsYEA0QGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBj/wAARCADiAOcDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDxk/tl/tJY/wCSj/8AlHsP/jFH/DZX7SX/AEUf/wAo9h/8Yrwg9KWvtvqlD+Rfcime7f8ADZX7SX/RR/8Ayj2H/wAYo/4bK/aS/wCij/8AlHsP/jFeE0U1hKH8i+5CZ7x/w2V+0j/0Uf8A8o9h/wDGKP8Ahsr9pH/oo/8A5R7D/wCMV4TRT+qUP5F9yJZ7t/w2V+0j/wBFH/8AKPYf/GKX/hsn9pH/AKKP/wCUew/+MV4RTqawlD+RfchHuv8Aw2T+0j/0Uf8A8o9h/wDGKP8Ahsn9pH/oo/8A5R7D/wCMV4VRTWDof8+19yFc92H7ZH7SH/RRv/KRYf8Axil/4bI/aQ/6KN/5SLD/AOMV4SOlLT+p0P8An2vuRLbPdf8Ahsj9pD/oo3/lIsP/AIxSj9sj9pDP/JRv/KRYf/GK8JpR1p/U6H/Ptfcguz3U/tj/ALSGP+Sjf+Uiw/8AjFH/AA2P+0h/0Ub/AMpFh/8AGK8KPSlp/U8P/wA+19yE2z3T/hsf9pD/AKKN/wCUiw/+MU4ftjftH4/5KN/5SLD/AOMV4TSjpR9Tw/8Az7X3IlyZ7r/w2N+0f/0Ub/ykWH/xilH7Y37R+f8Ako3/AJSLD/4xXhVKOtV9Tw//AD7j9yFzPue5/wDDY37R+f8Ako3/AJSLD/4xR/w2N+0f/wBFG/8AKRYf/GK8LPWij6nh/wDn3H7kTzPue6/8Ni/tHf8ARRf/ACkWH/xij/hsX9o7/oov/lIsP/jFeGUVX1LD/wDPuP3IHJ9z3Qfti/tHZ/5KL/5SLD/4xS/8Ni/tHf8ARRf/ACkWH/xivCx1paPqWH/59x+5Eucu57n/AMNi/tHf9FF/8pFh/wDGKP8AhsX9o7/oov8A5SLD/wCMV4ZRVfUsP/z7j9yFzy7nuf8Aw2L+0d/0UX/ykWH/AMYorwyij6lh/wDn3H7kHPLuUD0paQ9KWsj0WFFFFNEsdRRRTJYU6m06mhBRRRVIkUdKWkHSlpksKUdaSlHWgAPSloPSiqEwpR0pKUdKCWLSjrSUo61QhD1ooPWigkdRRRVCYo60tIOtLQSwoooqhBRRRQBQPSlpD0pa4T02FFFFNEsdRRRTJYU6tDw/oOq+KPFFh4e0O1N1qN/Mtvbwhgu92OAMngfU8Cvsj4X/ALAup6h5Wo/FDxHFYw4BOmaS4llB/uvLyq/8B3fWsK+KpUFeo7CPieivX/2hW+HGmfEqbwT8O/BraLD4cnm067v5rhpZdQljYIXYE4XBRunXJ6dK8gralPnipWtcln1P8Cv2c/g98YLKzhi+KuonXEgFxqGjxWYieMZAYIzZBAyBuGfpWt+0n+yN4d+Enwjj8aeDtX1i/EF2kV7HqDxsFjfIDrsRejbQc+tee/saXrWf7YnhhQzhZ0uYWCtgHNvIRn1GQK+8PCfiC3+KMnxU+EHi9RcT6ZfTWhSYrvks7hS8LADptzgHqMKTg14uLr1sPiLqTcVZteTdhpJn5LV1Pw28Iy+O/iz4f8IRB/8AiZXscDlOqoT8x/BcmqXjHwtqfgnx9q/hPWItl7pl09tJwQG2nAZc87SMEHuCK95/Yz0u0tfid4h+I2qWry2PhPRpr3cOgkIIA54ztD4r18RW5KLqR7afoSj7A8RfAz9nv4afCfXPFJ+GGk6lb6TZy3jpPmeSQxpyu9yxGSuPbnivzg+KHjjTPiB47bXtI8F6N4TtRCsK2GlR7IztJ+duxc5wSAOAOO9ff/gnWP8AhPv+CdPi3WtRuLmWXUbLWbmYSOWMbFpXCAn+EDAr8zK87KYPmqe0bck7bhMKUdKSvob9mr9mbUfjRqL67rc8um+E7OTZLPGP3l04wTHHnpweW7Z7161atCjBzm7JEWvsfPdKOtfbPxD+K/7OnwW1q88DeAvg9o3iXUbJxDd3d+qvEsi8Mu9wzMwPBxgZz6Vk+Ah+z1+0pr7eE774fP4A8U3IaW1u9Gm3Qzso3Ou0javVjgr0HBzxXMsdLl9pKm1Hvp+W4cvS58dnrRXo/wAafg54h+CvxEPhrXJoruGaP7RZ3sOQlxGTjODyCCCCD3HcYNecV206kakVODumZtWHUUUVqJijrS0g60tBLCiiiqEFFFFAFA9KWkPSlrhPTYUUUU0Sx1FFFMlj4Zpre4Se3leKVCGSRGKspHcEdDX1N+xB8VL3wz8d/wDhC9S1CRtJ8Ro0apNIdqXSjdG4z3YAp77l9BXytWho2rX2g+IrHW9MnaC9sbhLmCVTyjowZT+YFY16KrU5QfUR9Iftv/DGTwb8fD4vs7dI9K8TobkeWoULcoAJhgdzlXJPUu1fMNfpr8etKtP2gv2FrTxroVs019BbRa3axR9VZV2zxdMnAMgwOpQV+ZRBBweDXPllZ1KPLLeOjEz039nf/k6fwF/2Grf/ANDFe/X3xO/4Vd/wVN1/VLuVk0rUbuLTL8ZwBHLDEFc5IGFcIxPoDXzF8LNTk0X42+EtWiUs1rq9rLtDbd2JVOM9s9K9R/bM006d+2F4ikWDyku4ra5Qg535hRS3/fSt+VOtTVTEcktnFr8UI9S/b6+Gkem+LtG+J2l2bLBqqmz1CRAAgmQAxse+WTIz/wBM653RFf4bf8EztX1VhDa6n421MW0RYkSS2ynacYxxhHPXGG96+gPA89n+1P8AsGP4ZurtxrtnAtjNNIxJF3AAY5GPcONpP+83pXzz+2FdTeFrP4ffBuC68y18OaLG820BQ8zDbuIHfC5/4FXFhakp8mEnvF6+i1Q33PYf2WrObUf+Cd3jewtyvm3D6nEm44GWtUAz+dfnyetfo1+wkf7T/Ze8RaTdIr239rTx7OmQ8Ee4E1+eWsWEml+IL3TZShe3neJthyuQSODXXgH/ALRXj5ky2RJ4f0S+8SeKtO8P6ZH5l5f3MdrCmcZd2Cj+dfpz8ZvEVp+zv+xhFoug/wCi3xtE0eweDgrM6HfLnrkYds+uK+HP2ULC31H9r3wbDcqWRLiSYD/aSF2H6gV7X/wUH8TvceOvC3hBJF8u0tHvpFGc7pG2jPboh/Woxsfb4ulQey1Ylomz4wd2kkZ3YszHJYnJJrq/hj4ttPAfxd0Dxhe2E9/Bpd2ty1tBMImk29AGKsOuDjHOMZGcjk6Uda9iUVKLi9mZntf7Rv7QNx8d/FGmXMOiHR9L0yJo7e2eUSuzuQWdmCjrhRj2968ToPWippUoUoKEFZITd9WOooorYlijrS0g60tBLCiiiqEFFFFAFA9KWkPSlrhPTYUUUU0Sx1FFFMlhTqbTqaEffn7AXxHOpeGte+FeqXJkNkPt9hE/P7lztlUZPQMVOMfxmvk349fDmb4XfHvXvC/kSpZCc3Fg8gP7y3c7kIJ64B2k+oNQ/Az4iXXwv+O+geK4XAtkuFt71SAd1vIQsg5xggcg5HIHavrz9vvwQmseAvDfxM0uGGVbN/sl1PHyzQyjdEcg4Khg3/fdeV/u+N/uz/P+vzDdHzj+zr8N/BXivxOniXxz8TND8K2GlXUci2t1dRx3F06kMNocgBOOW59h6er/ALW2pfAL4i6pd+MfD/xNjk8U2NlHax6faWrTQXu1yR+9AwGw5GckfKBXxuOlLXZLCuVZVXN6dNCb9D6A/ZW+PWn/AAT8bas3iZtRl8P6ja4e3s0DkXCsNj4JH8O8fiK86+LvjyP4lfHLXvGYN39jvrstbx3DZkjgHCr6DCjp2rhKUda2jh4Rquslq9BXPuH4aftafAr4QfDseGPBngbxVsLtNM1w8RaeUqBvZt/fGOBwB0rwf41/FT4XfEQS3fg/4VL4d1i7uRdXeptdlmc/OWURj5RuL5J/2RXix6UtZ0sBSpz9or39WJtnbfCDxovw8+OHhrxhKXFvYXqvceWMkxH5XwMj+FjX2P8Atq/DS4+IHgnQfi/4KhbVYLW123RtV3k2rDes3HJC859A3sa+Aq9r+EP7UHxM+EGnDRtLuLXV9CySNL1NC6RZIJMbKQyE88ZK8k7c1GKw83UjXo/FHp3Qk1azPFiCDgggjsadsdQGZWAYZBI619jP+03+zZ4htk1Dxb+zzBFq0c/2kLYwW7pI4GcvJ+7LAktlWUg8E57eDfGj4ux/FfxJp8umeE9N8LaHpcDW9hpVgihYwzl2YlVUEsTnAAA+uSdqNerOVpU3H1a/piaXc8wPWig9aK6zMdRRRVCYo60tIOtLQSwoooqhBRRRQBQPSlpD0pa4T02FFFFNEsdRRRTJYU6vUfhB+z/8QvjPqZXw1p4t9LjfbcateZS3i9gerN7Ln3xXufi74Lfs4/s/aKifEzxBqXjPxYyCWPRLCX7Op6ffC5KIeeWYZGcCuaeLpwl7PeXZCPknR9G1XxBrtto+iWFxf39y4jht7eMu7sfQDmvvj9rXxlD4O/ZD8NfCvWLmC48UX9raLcwqeY0hUF5OBjBdQo6Z5x0r5jtP2jdW8Ka5d33ww8EeE/BwmUxrJbWInuEGTg+bKWIODg4wDjpXlnibxT4h8ZeJbjxB4o1a51TUrggyXNw+5jgYA9gBwAKidCderCc1ZR187iMkdKWt3wr4J8XeNtRew8JeHdS1m4RDI8dlA0pVR3OBx1Fa/jT4S/Ef4eWdvd+MvCGp6Tb3HEc88fyE/wB3cMgH2PNdvtIKXK3qSzi6UdansLRr/VbaxWaKFriVYhJM21E3EDLHsBnk19K337CfxptdIa+spvD2pNt3LBbXhDOMZ4LqB+tRVxFOk0qkrXFY+Yz0pa0vEHh/WvC3iK60HxDptxp2pWr7Jra4Qq6H6encHvWbW6aauhMKUdKSlHSmSxaUdaSlHWqEIetFB60UEjqKKKoTFHWlpB1paCWFFFFUIKKKKAKB6UtIelLXCemwooopoljq9Q/Z/wDhTL8YfjhpvhVzJHpqA3eozIASkCYyOo5YlV45G7ODivL6+y/+CeDWY+KPi9ZHQXR02IxKT8xXzDuIHpnbn6iubG1ZUqEpx3RJ9neLLzR/gv8As96xqXhjRLa3stA02Sa1sYV2IWVeAfqcZPU8nrX49+IvEGreK/FeoeI9du3u9Rv52uJ5XOcsxzgegHQDsABX69/tAWtxe/sv+O7e1P706NcMOvICEkcewNfjjXnZGk4zm97gwoor9Bfhh+xF8NfEXwU0TW/FEviCHXNU02OeXZcqgtpHAbKrt7A4w2fzr1MTi6eGSlU6k2ueNfsf/tB2Pwq8U3HhDxZKkHhrV5Q/2vZk2lxwodjn/VkcHg4wD0zX6R6rpOg+LfDEumavY2er6TfRDfDMolimQ8g+h7EEexFfMeifsB/CbTNYivNR13xJqsMZDfZZpo40fBBwSiBsduCOtfVFlZ2unabb6fYwJb2tvGsMMMYwqIowFA7AAAV8xmNehVqKpRvfqUj5R8VfsDfDnWPFsWq+HfEmq6BZNN5lxp6xrcKVyPliYkGPv97f1HHFfVtjaJYaXbWMcjyLBEsQeQ5Zgoxk+/FWKpXGsaTZ3It7vVLOCU9I5ZlVj+BNclXEVaySm72C1jwT9pj9mOw+NOlpr3h+WDT/ABjaoI47id2EN1ECf3cmAduMkhgPY9cj45t/2LfjxJ4yg0S58PWlvbyFS2qG8je3jU9SdpLcc8bc8cdq/UxHSQZR1YeqnNOrrw+aV6EOSOq8xOKZ+Y3xK/Yi+K/g2c3PhRIfGWmBCxlswIbiPCgndCzc85A2M5OOQM4r5tuLa5sryW0vLeW3uIXMckMqlXRgcEEHkEelfuXXxp+07+yRrnjzxte/EL4fS2Au54VN1pbjyjPKuQXVumSMdepHWvTwGcOUuTENev8AmRKHY/PqlHWtG68Pa7Y6reabd6PfQ3lkzLdQPAweAjrvGOMe9Zw619EmnsZCHrRQetFMkdRRRVCYo60tIOtLQSwoooqhBRRRQBQPSlpD0pa4T02FFFFNEsdXrH7OPxMPwr/aD0XxBPM6aZO/2LUFDbQYZOCT7K21v+A15PWlp3h/W9W0jUtU0zS7m6s9MjWW9nhQstujNtVnI6AnjNTVhGcXGWzJZ+3/APomo6b/AMs7i1uI/ZlkRh+RBBr8oP2ofg3efCX4x3C2uli38N6mzT6ZNFkoRnLRkknDKTjGemD3xX0F+x3+01ZvDafCXx1qBgdQsWi310+d/rA7nHOfuZH+zknGfqf4v/Cfw98Y/hndeEdezCWPm2l6i7ntJgCFkUZGepBGeQT9a+ZoTnl2I5Z/C/y7hufjNX1D8Mf24PiT4JsLPRvEljZeJdJtYxCgceRcKirhQJFGDjA+8pPvXifxR+Fni74SeO5/DPizT3gcFmtbkYMV3FuIWRCCRg46dR0IBriq+knSpYmC5ldEn6jfCz9s/wCGPxH8Q2Xh29tr7w5q94wihjvdrQySHoiyqep7bgM9OtfSFfij4E8IeN/FniyztvA2galqmopMrxmzhLCIhhhmb7qAHGWYgDua/Zrw1JrMvg3SpPEUAg1drSI3sQKkLNsG8fKWH3s9CR7mvmc0wdPDyXs3v0Gnc86/aT8Y+LvAf7OeueJfBS41O38tfP8ALDm3jZgGkAPHGR1B61+Smp63q+taxPqurandXl7O5kluJ5S7uxOSSTX7d6jp1jq+kXOl6laxXVncxtDNBKoZZEYYIIPUYr8sv2j/ANm3Xvg14kn1rT4jd+DbmZUtL4yJvjdgT5TpndkYPzYweOh4rsySvTjem9JP8fIUkeWeHPiX8QfCDSN4Z8Za1pfmEF1trt1ViCDyM47Cvov4c/t4/EHw6ltp/jrS7XxPZo58y7XEF3tOMcj5Gxz1AznrXyUelLXu1sJRrK04pkXaP2H+F3x4+G3xcsd3hTXY/tyKpm026/dXEZIyRtP3gORuXI4PNel1+HGm6nqOjatb6ppN9cWN7buJIbm3kKPGw6EMOQa/Qz9l79rS38bLaeAfiVfxQeJWYQ2OoONqageyNgYWT8g3AHPB+cx+UOinUpar8UXGd9z6w/svTPtFxP8A2daebcgLPJ5S7pQBgBjj5uOOa+AP23fgz4Q8DvonjDwb4cl00alPNHqH2WM/ZVfCspxnCMctgAYOD6V+hVZ2u6Do/ibw7d6Fr+nQahp13GYp7eddyup/kfQjkV5+CxcsNVU+nVDlG6PxAPWivsP4p/sH+M9O1y4v/hbd2us6U/zR2F5cLDdRnuu5sIw9DuBx29flLxJ4Y8QeEPEVxoXibSLrTNQt3KSQXKFTwcZHZh6EZB7V9rh8XSrq9OV/zOZxa3MuiiiuolijrS0g60tBLCiiiqEFFFFAFA9KWkPSlrhPTYUUUU0Sx1fbP/BP3S9J1qL4kaVqtlFcw3dpbW8yPj54n84MvXOD7V8TV9MfsWfFjwz8NPi/qFj4ruEsrPXbdLZL+VwscEiMSu/0DZIz2OPXI5MwhKeHko7/APBEW/2m/wBlfVPhfrMvjDwHZ3F14Slfd5EPmSzacQuTvPJ8vgkOTx0PYn0b9m79s8QQWXgX4u3X7qNBDaeIXOSAAcC5yeeMAOBn1z1r7lubbTta0aW0u4YL6wu4ikkbgPHNGwwQR0IINfCHx6/YevLI3Xin4Pqbq2GZJdAc/vVyST5LE/MBnAQ4OB1Jrx6GLpYmHscVv0Yj7A+Ifw28CfGjwCmj+JraLUdPkxPaXlrLh4mIwJIpF9j7g9wa/O34i/s1a98D/iPZ634k0G68XfD+O6V5rmwJRzDnlJccxtjv90+ozxzXwp+P/wAUPgPrkulWzSyacs2LvQ9TQ4DDghc/NG3GOPxBr9APhZ+018Kfi9oUdlNqNrpOqzoIrjRtUdVLMcgqjNhZQcHp2IyB0q1DE5f8PvQf9fIWjOl+Cviv4R+JfAEH/CpV0qzsEUPLptpEkMtuxHIkjHIb35z6mvS6+bvGH7LS6f4oHjn4G+KLnwP4ihjYLaxHdZTjJbyyv8Kluowy/wCzXmvxW/aW/aY+GVjBZ6/8MNI0mRlA/tcb7yCU+zKQqt8p+UnPtXB9VWIn+4le/R7/APB+Q723PtuqWr6Ppev6Jc6PrWn29/YXUZintrhA6SKeoIPWvzetP29vjLFfwveWHhyeBXUyRLashdR94A7zgn17V9ZfCj9rf4WfEu0gtb3UovDOuSPsOm6jIAGPYpLgK2fTg+1FbLcRQXM1f0BSTPD/AI4/sMXD3tx4j+DkkflMC8mgXL7dpwT+4kPrwAjev3u1fG3ivwZ4q8D6/Jovi3Qr3Sb6M4MVzHtz05VujDkcgkV+2isroHRgykZBByDWR4h8KeGfFmnNYeJtA07VrZlK+XeQLKAD1xkcfhXVhc6qU1y1VzL8SXC5+ItWLO5azv4LpUV2icOFYkAkHPOCD+RFfqLqv7FXwD1KGYQeHr/TpZG3CW0v5AU56KrErj2xWHof7CHwe0nXYtQu7/xDqkUZJ+yXNyqIxxxkoqtx1616izvDta3+4hwZ6f8As7eN9V+IP7N/hrxHrcMyag0Bt55Jc5naNinm5PXcFBJ9Sa2/HnxK074e674Yg122CaZrl8dNOomYKtrOylowykcq21huyNvGevHUaJomleHPDtnoWh2MVlp1lEIbe3iGFjQdAK+S/wDgoLrlrbfCzwpoW8i8udUa8jweixRlSfzlWvnqFOOJxPKlZSb+X/DGjdkfYYIIyDkGvzC/bZ1vxBfftIXOl63oen2EVnbxizuIFDSXUByVd5CAepYbegI74Br77+Bfiu78bfs7eEvEt+Xa7ubBBO7jBeRPkZvxKk/jSfFT4J+APjDpEdp4w0ovcQA/Z7+3by54cg9G7jnO05Ge1aYGvHB4huor2uhSXMtD8dKK9x/aJ/Zz1P4E6rp08erf2xompl1guzF5bxuvPluMkZ2kEEHnB4GK8Or7SjWhWgpwd0zmkraMUdaWkHWlrUhhRRRVCCiiigCgelLSHpS1wnpsKKKKaJY6iiimSz6c+An7Yfiv4YRWfhjxdHJr/hWPCIM5urNOgEbEgMo/ut+BFfob4B+KHgT4m6DHqvgzxHZakjJueBJAJ4faSM/Mh+or8Vq0NI1rWPD+rRaroWq3umX0RzHdWczQyJ9GUgivLxeVU675o+6wufrv8Vv2fvhp8Ybbf4p0cxakqhY9VsSIrlAM4G7BDDk8MDXxd8SP2E/iL4TEmq+ANUh8U2kX7wQqPs14uOeEJKtj2bJ7Cp/hz+3v4+0GOOy+IGkWvie3Xg3cOLW5x2ztGxsf7oPvX1L4D/a7+Cfjny4P+EjOgXjAf6PrSi3GeePMyU7evpXnRWOwWiV4/ev80GjPizwf+038e/gpqsvh7xJHc38cTKr6b4jhkEsQXAwjEhl4GOcjvivp/wAE/tv/AAg8bpFovjfTLnw5NOirL/aEa3Nkzlsbd65O3vudVHWvofU9K8DfEXwy9jqdroviTSp1wVfy7mNueoPODkcEcgj2r508c/sFfCzXV87wZqWp+FLgKFEYc3kB55JWRt+SPRwPapeIwdd/vocsu6/r9BWa2JPE/wCzZ+zx8dobjXfh/wCJLHT74MRJc+H54poQ5JP7yEHqeT1U/hXz/wCOf2D/AIq6BdvL4Nu9O8VWeRsCyLaXGPVkkO38nNaHiT9gz4reHrg3XgzxRpesKCApDvZTYPU4OR/49VeTXP23fg2sdhcN4lv7JJN4eSBNYjYDAx5hDuq+2V9sV20ZzjZYeupLtL+rifmjE0jxb+1l+zsxtr7StfXR7ZgXg1K2a9seQDhZlyAML0Vxjn3r2jwN/wAFAtEksVtviT4OvrK9DBTc6OBJCwx94o7Bl7DALfWuE079uD45aJfGz8UeBNLvChYyRy2M9tMMr8o+9gAHB5XJGee4l1b9tbw14ks4V8afs96BrVxsBZ7uVHVjxyokgYgcDuegqquGnV/i0E33i7CvbqfUWgftZfALxDcyQW3j+0tHjXeTqMMlopHs0igE+wNb/wDw0J8Ef+ipeF//AAPT/GvhDW/2iPgh4gs0tb39lnw7CiPvBsL0Wb5xjloYVJHsTimRftDfCnR/Cb2Xh39l3wjHLuJiutYYagFY8ncXiDsPbeMVyvKb7Ql98f6/AOc+rvHf7a3wa8KW11Dod/deKdRi+VYdOiIiLYyCZmAXb7ru+lfDfjDxl8Rv2ovjtaRx2Zmvbpvs2m6VA37q0iGWIycdgWZz19gAB6t8EY9b/aP8U+IvCraz4d8A6QbENd6V4a0S2tmvo2fBwcbvl4G4lsA4/iOftT4RfA7wJ8FtCnsfCNpcPcXW03eoXknmT3G3O3JACgDJ4UAfjWntKGW3Sjep9/6L8PvFZy9Do/h94WXwT8LPD/hJZmm/suwitDI3ViqgE/nXA/tNa58T/DvwHu9V+FUMzapFMhuZbeETTQ2/JZ0U5yQQueDgEnHGRxfxu/bF8LfCvxFfeEtI0K81vxFa4WRZf3FtExGeWPzN+AwfWr3wo/bF+GHxF+z6ZrNwfC2tyAKbfUHHkSOcDCS9Op6NivNhhcRG2JlC639fkU5La5+e3jj4zfE/4jaNBo/jfxZdavZ2832iOGaKNAkgBXd8qg9GI/GuDr6i/bc8JfDbwz8XrK58HMsGt6lHJdazZQPmGNiQUkx/C75ckA4+UHAJyfl2vscJOFSjGdONk+hzyVnqKOtLSDrS10mbCiiiqEFFFFAFA9KWkPSlrhPTYUUUU0Sx1FFFMlhTqbTqaEFFFFUiTT07xBr2lFDpms39n5b70+z3DR7W9Rg9eK9V8PftV/Hjw5dRyw+Pr2/RAR5OpKtyrZOedwz+teN+VKIRKY2EZOA+OCfrTaznRp1PjimK59V+Hf29/i5pt7v17TNB1q3JGY/INuwHfDKf5g12Nr/wUR1gQkXvw0sZJM8GK/ZRjHoUPeviOlHWuaWW4aT1gHMz7rtf+ChGlSRs2qfCkmUngw36kEe+6Osq/wD28NCluT9l+CumSRKoWM3NyhYDHTiLpXxSelLSWVYZP4fxf+YnJn1TdftoCKR7jQPgr4JsLuWPEtxJD5hZycluAvB9Cfxryjx9+0B8RviNoZ0TWbyws9LLb2stMs47aNz6ttGT26ntXltKOldFPB0abvGOv3/mS2zp/h7431f4c/EnSfGWiORdafOspj3FRMmfmjb2YZB+tfr/APDfx9o/xM+GOk+NNEbbbX8IdoWYM0Djho2x3VgR+Ffi1XWeGPiH8QfCug6hofhPxPq2mWN7iS5hsZSm7b3yOV684Iz3rmzHLli0nF2kvyHGXKfRP7fOl6JF8adH1rTb+wkvbuw8m9toGBlR42+V5MdMqwA7/LXyUCQcg4NS3NzcXd3Jc3c8s88jFnllYszE9SSeSairtwtF0aUabd7Gcnd3Jp7ie6naa5nkmlbq8jFmP4mo6KK6USxR1paQdaWglhRRRVCCiiigCgelLSHpS1wnpsK+u/2QfA3wV+LsOoeEPGXw1+165ptubw6suqXKC5QyBdpjR1CkbhyOo9O/yJX2T/wTwuZ1+LniyzWUiCTSFkaPsWWZAD+AZvzrjzBtUJSi7NfIlnRWOm/sSSfFaL4dax8PbzS9aF1NY3UsupXZtbSeNiux5TMOpGNwXGe+Oa8f+L37OOtJ+0N4h8OfB/QV1nTLVYrlbLTp2nNjG6AqsryHhidxA3E45r1D4r6Z+xwPG/jebWfEPiOLxZdahdLOsCysLS7DsXKjbtKl1PUn73GO3j/7KPjTX/DX7VOhafpOsyx2Os3Isr1JFLLcx4JXcOxzjB7Z9M1y0eeMHWg5aLaV7ProSzz26+DnxWstWfTJ/h54j+1py0MdjJIyjGcnaDx6HocHHSuX1XR9W0PUW0/WtNutPu0+9b3UTRSL9VYAivv39rf9o/xt8L/i1ofhnwHq8NoY7UXWoxyWiSeZub5F3MDxtB6Y61wX7dVnpWtaF8NfiRaReXd6zp7LKwGN8ZSOVMjtjzH/ADrbD42pNw9pFJSvb5AfK/hv4eeOvGETS+F/COs6vEucy2do8iDAJI3AYzweK6jTv2efjRqnhO68SWvw91ddPtWKyNcIIJOMZKxuQ7DnqAR19K+qviZrvj/wL+yT8IoPgRPqI0+ewMuoXmlW/nHcI4my7hTty7zZ6dCO1Sftp/EPxr4V+HvgTQbXxC9peajaSNq9vCV/fkJGMsMdNxfHbP0pRx1Wc4xgl7ze976dxWPGvFnjDxxo/wCxHZ/CjXvgvqmkwWd5mXxDeWjxxqfN3gjKDEjElC27pxznjxBfh548bwsfEq+DNeOjiMS/2h9hk8nYf4t+MbffpX2drni/WPFX/BJG51fxJctfXpaKzEzABiqXiIhPqQAOep71tfsh+M77R/2GvGfiDUd2oxeH7m9lt7aU5Hlx2scvl/QsW/OojipUaU5Rir81nruK12fC118PfHljoi6zeeDNfg05ovPF5JYSrF5f97ftxj3rnUVmcKoJY8AAcmvv39lj46+PPi58X9c8G+N9YtNb0aXRGu1h+wxwrE26NWjwFG5R5rLznO3NeUfswfDbwzrn7bGtaZqMS6hY+Hnubq1jkTCyPHMEQke2c49q6ljZQ5/ax1ir6eYrHglz8L/iRaaMmrXPgLxHFYyJ5i3L6dKEK4zuzt4GO9YF3pd9ZasdMnhBuhtHlwusuSwBABQkE4I4H061+jmhf8NRn9rV9T1yCOPwBLfSW76f9ttzDHacqjhMlt3CtwMk5HGa4Pwl8GvB91/wU78T6cmn20mj6PbJrkVmOESdxCwAA4IDyMcdOlZwzPfntor6O/y9ROJ8fn4X/EgaCdbPgLxINOC7zdHTpfL29c529Pes7w/4R8UeKrme28NeHtS1aa3UPNFZW7SsgLBQSFGepAr9LdKuv2mpf2oNmsHQbb4cpcSgxxvAwa3+by/+mnmfdz0HFeCXs0Pw7/4KpwWugXf2HTdW1CBZ4LOXKSeegyrKOBlznHbOaVLMZz5lZXSvo7/J+YnE+XrT4ZfEa/1C5sbLwJ4jnubUlZ4o9OlLREdmG3iva/2Ytd+IHwt1HxH4ksvg94g8U2F5aNZyNBC6LE8bHKnKHd8xCsByOTzjFe0fH/8Aas8afCj9qL/hHtDtbC70KwtIzeWEiqGuZJFLZMgG5MApgD0PrUX7H3xQ8TfEL4t/EvUdWnWG3vYV1AWMWfKhkLMPlzz93A98D0FTWxNaphnOpBcrSe77gkk7I+K9N8K+LvHOs6hN4Y8J6jqTrKZJodMtHlWDcxwCFB2jsM+lS2/w0+Il5JcR2ngbxFO9tkTLFp8rGIg4IbC8HPavYv2QvEur6Z+2Hp9lb3kwt9Wa4gvIt52ygI7gsO5BGRmvV/2hv2oPib4A/afufCvhe8s7PR9Ma3822Nsj/atyq7b2I3DIbbwRXVUxNZVvY04p6X3IUVa7Pie+sL3TNRmsNRtJ7S6hYpLBOhR0YdQQeQa3NF+HvjvxHYNfaB4O1zVLVes9nZSSoOM/eUEdDX01+3nommRfEvwf4nt4ooBrNg/nvHGA7eWyYZumTtkAGT27V3vx+8VeNPAHgr4WaJ8Cby/tfDd3aL5T6TB5n2jATywWAJJIYnHckk5pLHynCm4LWd99lYHDe58jS/A74sWvgC+8a3vgfU7PRbHP2ie7UQsgBwT5bkOQPUDFef19T/tk/FnxNqnxYn8BWWuXMWiWljbx3lnBOfKnnxvYyKONwLAY/wBkV8sV14SpUq01Ookr7W7Gc0k7IKKKK6yAooooAoHpS0h6UtcJ6bCvuH9gHwJ4gs/EOs/EOdJbbR7myewiMq7VnfzEbcpP3gNjA46V8PVPFe3kEflw3c8addqSECsMTRdam6adrks+o/GH7Inx38W/G7W9Yn0XT47LVtYmuW1E6hb7FjllLGTYH3YAbOAM8dK6LRPgE3gD9vzwh4c8FteavZaTb2up6neS7cQkhgzHGNoJXgHJ56nrXyJJrmtzW8ME2sX8kUIIije4crGCckKM8ZPPFRW+p6laX4vrXULqC6HSeKVlcf8AAgc1n9XrNcrmrWtt/wAEln1V+3p4V1y2+PFp4wks/wDiTXtjFbQ3SsCplTO5D3BwQfp+NdZ+1f4d1fVv2P8A4S+IdOtftGnaTpduL2ZHX9z5tvCqEjOSCRjIHHHrXxLPd3Vzj7TczTYOR5jlv51Zs7+SO9tftU8r20cqM0ZYsuAR26UoYSUVT974PLf8RH6I+APD/wAZ9Q/Yt+Gll8GPEul+HJVt7h9RfWIyHfdMSoQNG/GTIenIK4yK+bf2hfgb8fNHux4++I2oQ+KhcssMuoadIZVtznCIU2LsBJ4wuMn1NezfHLwvB+0LfaN4u+Hnxn8G2vh8hbOGz1XUJbB4ZsYEQj5BJIZhlFb5jyy7cY3xp+IPgr4b/siD4F+G/Gdn4k1q5mP2htPkaeO1iMxlKGQlgcH5fvBu+B0rgw05xnFwteT1VtUm9bvyBnoU/wAJfGM//BMT/hXqaLHbeI44BetYCTfJLtuBOVAXP7wqMBfXiq37MXw68Xj9hvxz4S1PSn0m+8RG9/s4X58rzBNaJErMPvKu5epHTkV+fA1LUduPt9zj/rq3+NCahfxoEjvbhVHACyEAfrXY8vqOEoc61lzbf8Em59X/ALDOmXfh79rLxHoutJ9j1Cz0e5tZreU4ZZFuIQy+nBU1P8PtXg/Z5/b/ANct/HtzHa2erPNF9rRd0axzuJIpC2eBnAJwcc/WvkRbi4SczpPIsp5LhiGP40STSzymSaV5HP8AE5JNbzwftJylJ6SVmK59qeOv2SfiZ4k+NmpeI/DfjKzj8M6ldNfw6rPqJJhVyXGACSwGQAR/TNeffBXxZp3wQ/beubXWfF0WqaNMZdMvNcZz5cquodZScnI3qoySeCTXzs2r6s2mrp7aneG0Rty25mby1J4yFzgHgVUJLHLEk+pqo4Sbg6dWV01ba3zE3qfaHxD/AGSfiN4g+MV/qnhTxBpkXhS+ka8TVZNQKhFkZnO9d5JK5xkDBAB65rzb4BfDDUdQ/bTsdMtdRi1ux8Nal9qvNXtGYwsImypDEd2AA9eee9fP32698nyftc/l427PMOMemKSG4nt2LQTSRMRglGK5/KnHDVVTcJT6W2/HcTaPp79uDwV4hsfj/d+NX0iUaDfw28MeoouYmmEZBQsP48Rk49AK9A/YD8H65bnxZ4uu7RrbSr61js7WeZSoncMxYoSMMB0JB618Ry3l3cJsnuppVBzh3LDP40+G/voIDBBe3EcROdiSELn1wD7n86U8HOWG+r83le3b5i5tbn1Z+z58GPHvhD9uK2g1jR5Y4dFknnubvawhaJkdI3RiMMHOcfQ5xiuO/a98Ha94f/am1bXNRtXGm61MlxZXYBMcgCKrLn+8pHI9x614Tba1rFlfC9stVvbe5UYWaGdkcD2YHPc1XuLu6u5PMurmad8k7pXLHJ69auGGqKv7aUltbb/gk3VrH2/+3b4Z1a98C+APFVnALjS9PgktLmaM58p5ViKZHXB2MM+uB3Fegab4T+MSfssfDHQvgrrtj4fB09ZNRm1htkyySIXdQrxMdu8vjGCOOo5HwJ4G8QWmlfE7w5qfiRp7vSLPUre4uoGdiGjSRWbjnPAPFfX3xo8B/wDDQfxF0zxR4K+OHgr+xbiLZZWV7fNb3EBVRvRY8Et/ewQpG7kdz51bDujGnRm/dV3dq69LfMtO92fP3xx+B/xZ+G9+vib4h3EesJqMxQ6xDdNcCSTGcOzAMDgcZHavHK+tvjj478KaF+ybovwOj8aw+LPFOn3SS3t5YIXt49pZivmnG/7+ARknBzg18k16uBqTnTvUXXta66OxlNJPQKKKK7TMKKKKAKB6UtIelLXCemwooopoljqKKKZLCnU2nU0IUO4GAxAznAPekJJOScmiimiRR0paQdKWqJYUo60lKOtAAelLSHpS1QmFKOlJSjpQSxaUdaSlHWqEIetFB60UEjqVWZSCrEEdMGkoqgYoJJyTk0tIOtLQQwoooqhBRRRQBQPSloorhPTYUUUU0Sx1FFFMlhTqKKaEFFFFUiRR0paKKZLClHWiigAPSlooqhMKUdKKKCWLSjrRRVCEPWiiigkdRRRVCYo60tFFBLCiiiqEFFFFAH//2Q==";
+
+/* ================= STATE ================= */
+const PROC_COLS = [
+  {key:'millTurn', label:'Mill/Turn'},
+  {key:'grind', label:'Grind'},
+  {key:'jig', label:'Jig B/G'},
+  {key:'cmm', label:'CMM'},
+  {key:'vmc', label:'VMC'},
+  {key:'ht', label:'HT'},
+  {key:'finGrind', label:'Fin. Grind'},
+  {key:'wireCut', label:'Wire Cut'},
+  {key:'bench', label:'Bench'},
+];
+
+function defaultProcessRates(){
+  const o = {};
+  PROC_COLS.forEach(c=>{ o[c.key] = {mode: c.key==='ht' ? 'auto' : 'manual', rate: c.key==='ht' ? 80 : 0}; });
+  return o;
+}
+
+const state = {
+  materials: [
+    {id:'MS', name:'MS', rate:80, density:7.85, htRate:60, notes:'Mild Steel'},
+    {id:'OHNS', name:'OHNS', rate:150, density:7.85, htRate:90, notes:'Oil Hardened Non-Shrink'},
+    {id:'HCHCR', name:'HCHCR', rate:250, density:7.85, htRate:110, notes:'High Carbon High Chromium'},
+    {id:'P20', name:'P20', rate:220, density:7.85, htRate:100, notes:'Mould Steel'},
+  ],
+  processRates: defaultProcessRates(),
+  stockAllowance: 5,
+  defaultMargin: 15,
+  currency: '₹',
+  companyLogo: DEFAULT_JMC_LOGO,
+  eSignature: null,
+  brandColor: '#003393',
+  pdfColumns: {photo:true, rmCost:true, millTurn:true, grind:true, jig:true, cmm:true, vmc:true, ht:true, finGrind:true, wireCut:true, bench:true, sum:true, margin:true, subTotal:true, lineTotal:true},
+  pdfAutoHide: true,
+  marginDisplayMode: 'both',
+  parts: [],
+  extraItems: [
+    {description:'Design Costing', amount:3000},
+    {description:'Assemble & Transport', amount:5000},
+  ]
+};
+
+let partSeq = 1;
+function newPart(){
+  const p = { id: partSeq++, sno: 100+partSeq, description:'', shape:'block', materialId: state.materials[0]?.id||'', dia:'', t:'', w:'', l:'', qty:1, unitPriceStd:'', marginOverride:'', image:null };
+  PROC_COLS.forEach(c=>p[c.key]='');
+  return p;
+}
+
+/* ================= PERSISTENCE ================= */
+const STORAGE_KEY = 'jmc-quote-engine-settings-v3';
+const storageAvailable = (typeof window.storage !== 'undefined' && window.storage !== null);
+
+async function saveSettings(){
+  if(!storageAvailable) return;
+  const payload = {
+    materials: state.materials, processRates: state.processRates, stockAllowance: state.stockAllowance,
+    defaultMargin: state.defaultMargin, currency: state.currency, companyLogo: state.companyLogo, eSignature: state.eSignature,
+    brandColor: state.brandColor, pdfColumns: state.pdfColumns, pdfAutoHide: state.pdfAutoHide, marginDisplayMode: state.marginDisplayMode
+  };
+  try{ await window.storage.set(STORAGE_KEY, JSON.stringify(payload), false); }
+  catch(err){ console.warn('Settings save failed', err); }
+}
+
+async function loadSettings(){
+  if(!storageAvailable) return;
+  try{
+    const res = await window.storage.get(STORAGE_KEY, false);
+    if(res && res.value){
+      const saved = JSON.parse(res.value);
+      Object.assign(state, {
+        materials: saved.materials || state.materials,
+        processRates: saved.processRates || state.processRates,
+        stockAllowance: saved.stockAllowance ?? state.stockAllowance,
+        defaultMargin: saved.defaultMargin ?? state.defaultMargin,
+        currency: saved.currency || state.currency,
+        companyLogo: saved.companyLogo || null,
+        eSignature: saved.eSignature || null,
+        brandColor: saved.brandColor || state.brandColor,
+        pdfColumns: saved.pdfColumns || state.pdfColumns,
+        pdfAutoHide: (saved.pdfAutoHide !== undefined) ? saved.pdfAutoHide : state.pdfAutoHide,
+        marginDisplayMode: saved.marginDisplayMode || state.marginDisplayMode
+      });
+    }
+  }catch(err){ /* no saved settings yet — use defaults */ }
+}
+
+/* ================= HELPERS ================= */
+function fmt(n){ return state.currency + (Math.round(n*100)/100).toLocaleString('en-IN',{maximumFractionDigits:2}); }
+function num(v){ const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+function hexToRgb(hex){
+  hex = (hex||'#b9793f').replace('#','');
+  if(hex.length===3) hex = hex.split('').map(c=>c+c).join('');
+  const n = parseInt(hex,16);
+  return [(n>>16)&255,(n>>8)&255,n&255];
+}
+function shade(hex, percent){
+  let f=parseInt((hex||'#b9793f').slice(1),16), t=percent<0?0:255, p=percent<0?-percent:percent;
+  let R=f>>16, G=f>>8&0x00FF, B=f&0x0000FF;
+  return "#"+(0x1000000+(Math.round((t-R)*p)+R)*0x10000+(Math.round((t-G)*p)+G)*0x100+(Math.round((t-B)*p)+B)).toString(16).slice(1);
+}
+function imgFormatFromDataUrl(url){ return (url && url.startsWith('data:image/png')) ? 'PNG' : 'JPEG'; }
+function roundUpTo10(v){ return Math.ceil(v/10)*10; }
+function formatMargin(margin, marginPct){
+  if(state.marginDisplayMode==='amount') return fmt(margin);
+  if(state.marginDisplayMode==='percent') return marginPct+'%';
+  return fmt(margin)+` (${marginPct}%)`;
+}
+function applyBrandColor(){
+  document.documentElement.style.setProperty('--brass', state.brandColor);
+  document.documentElement.style.setProperty('--brass-dark', shade(state.brandColor, -0.28));
+  document.documentElement.style.setProperty('--brass-light', shade(state.brandColor, 0.35));
+}
+
+/* ================= CALC ================= */
+function computePart(part){
+  const mat = state.materials.find(m=>m.id===part.materialId) || {rate:0, density:7.85};
+  const a = num(document.getElementById('stockAllowance').value || state.stockAllowance);
+  let weight = 0, rmCost = 0;
+  if(part.shape==='block'){
+    weight = (num(part.t)+a) * (num(part.w)+a) * (num(part.l)+a) * mat.density / 1000000;
+    rmCost = weight * mat.rate;
+  } else if(part.shape==='round'){
+    const r = (num(part.dia)+a)/2;
+    weight = Math.PI * r * r * (num(part.l)+a) * mat.density / 1000000;
+    rmCost = weight * mat.rate;
+  } else {
+    weight = 0;
+    rmCost = num(part.unitPriceStd);
+  }
+  const procVals = {};
+  const procIsOverridden = {};
+  PROC_COLS.forEach(c=>{
+    const pr = state.processRates[c.key];
+    if(pr && pr.mode==='auto'){
+      const hasOverride = part[c.key] !== '' && part[c.key] != null;
+      procIsOverridden[c.key] = hasOverride;
+      const effRate = (c.key==='ht') ? num(mat.htRate) : num(pr.rate);
+      procVals[c.key] = hasOverride ? num(part[c.key]) : roundUpTo10(weight * effRate);
+    } else {
+      procVals[c.key] = num(part[c.key]);
+    }
+  });
+  const processSum = Object.values(procVals).reduce((s,v)=>s+v,0);
+  const sum = rmCost + processSum;
+  const marginPct = (part.marginOverride!=='' && part.marginOverride!=null) ? num(part.marginOverride) : num(document.getElementById('qMargin').value || state.defaultMargin);
+  const margin = sum * (marginPct/100);
+  const subTotal = sum + margin;
+  const lineTotal = subTotal * num(part.qty||1);
+  return {weight, rmCost, procVals, procIsOverridden, processSum, sum, marginPct, margin, subTotal, lineTotal};
+}
+
+/* ================= RATE MASTER: MATERIALS ================= */
+function renderMaterials(){
+  const tbody = document.querySelector('#materialsTable tbody');
+  tbody.innerHTML = '';
+  state.materials.forEach((m,i)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input data-idx="${i}" data-f="name" value="${m.name}"></td>
+      <td><input data-idx="${i}" data-f="rate" type="number" class="num" value="${m.rate}"></td>
+      <td><input data-idx="${i}" data-f="density" type="number" step="0.01" class="num" value="${m.density}"></td>
+      <td><input data-idx="${i}" data-f="htRate" type="number" class="num" value="${m.htRate||0}"></td>
+      <td><input data-idx="${i}" data-f="notes" value="${m.notes||''}"></td>
+      <td style="text-align:center;"><button class="del-btn" data-idx="${i}" title="Remove">×</button></td>`;
+    tbody.appendChild(tr);
+  });
+  tbody.querySelectorAll('input').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      const i = +e.target.dataset.idx, f = e.target.dataset.f;
+      state.materials[i][f] = (f==='rate'||f==='density'||f==='htRate') ? num(e.target.value) : e.target.value;
+      renderPartsMaterialOptions(); recalcReadouts(); saveSettings();
+    });
+  });
+  tbody.querySelectorAll('.del-btn').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      state.materials.splice(+e.target.dataset.idx,1);
+      renderMaterials(); renderPartsMaterialOptions(); recalcReadouts(); saveSettings();
+    });
+  });
+}
+document.getElementById('addMaterialBtn').addEventListener('click', ()=>{
+  state.materials.push({id:'NEW'+Date.now(), name:'New Material', rate:0, density:7.85, htRate:0, notes:''});
+  renderMaterials(); renderPartsMaterialOptions(); saveSettings();
+});
+
+/* ================= RATE MASTER: PROCESS RATES ================= */
+function renderProcessRates(){
+  const tbody = document.querySelector('#processRatesTable tbody');
+  tbody.innerHTML = '';
+  PROC_COLS.forEach(c=>{
+    const pr = state.processRates[c.key];
+    const isHt = c.key==='ht';
+    const tr = document.createElement('tr');
+    const rateCell = isHt
+      ? `<td style="font-size:11.5px;color:var(--ink-soft);font-style:italic;">Uses each part's material HT rate ↑</td>`
+      : `<td><input type="number" class="num" data-key="${c.key}" data-f="rate" value="${pr.rate}" ${pr.mode==='manual'?'disabled':''}></td>`;
+    tr.innerHTML = `
+      <td>${c.label}</td>
+      <td>
+        <select data-key="${c.key}" data-f="mode">
+          <option value="manual" ${pr.mode==='manual'?'selected':''}>Manual (type per part)</option>
+          <option value="auto" ${pr.mode==='auto'?'selected':''}>Auto (weight × ₹/kg)</option>
+        </select>
+      </td>
+      ${rateCell}
+      <td style="font-size:11px;color:var(--ink-soft);">${isHt ? 'Rate set per material grade, not here — different steels harden at different cost' : ''}</td>`;
+    tbody.appendChild(tr);
+  });
+  tbody.querySelectorAll('select,input').forEach(el=>{
+    el.addEventListener('input', e=>{
+      const key = e.target.dataset.key, f = e.target.dataset.f;
+      state.processRates[key][f] = f==='rate' ? num(e.target.value) : e.target.value;
+      if(f==='mode'){ renderProcessRates(); renderParts(); }
+      else { recalcReadouts(); }
+      saveSettings();
+    });
+  });
+}
+
+/* ================= RATE MASTER: PDF COLUMN TOGGLES ================= */
+const PDF_TOGGLE_DEFS = [
+  {key:'photo', label:'Photo'},
+  {key:'rmCost', label:'RM Cost'},
+  ...PROC_COLS.map(c=>({key:c.key, label:c.label})),
+  {key:'sum', label:'Sum'},
+  {key:'margin', label:'Margin'},
+  {key:'subTotal', label:'Sub Total'},
+  {key:'lineTotal', label:'Line Total'},
+];
+function renderPdfColumnToggles(){
+  const box = document.getElementById('pdfColumnToggles');
+  box.innerHTML = '';
+  PDF_TOGGLE_DEFS.forEach(d=>{
+    const wrap = document.createElement('label');
+    wrap.className = 'col-toggle';
+    wrap.innerHTML = `<input type="checkbox" data-key="${d.key}" ${state.pdfColumns[d.key]?'checked':''}> ${d.label}`;
+    box.appendChild(wrap);
+  });
+  box.querySelectorAll('input').forEach(cb=>{
+    cb.addEventListener('change', e=>{
+      state.pdfColumns[e.target.dataset.key] = e.target.checked;
+      saveSettings();
+    });
+  });
+}
+document.getElementById('pdfAutoHide').addEventListener('change', e=>{ state.pdfAutoHide = e.target.checked; saveSettings(); });
+
+/* ================= BRANDING ================= */
+function compressImage(blob, maxDim=260, quality=0.72){
+  return new Promise((resolve)=>{
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = ()=>{ img.src = reader.result; };
+    img.onload = ()=>{
+      let w = img.width, h = img.height;
+      if(w > h && w > maxDim){ h = Math.round(h*maxDim/w); w = maxDim; }
+      else if(h > maxDim){ w = Math.round(w*maxDim/h); h = maxDim; }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    reader.readAsDataURL(blob);
+  });
+}
+// Signatures need a transparent background to sit naturally on the PDF — PNG, not JPEG.
+function compressImagePNG(blob, maxDim=300){
+  return new Promise((resolve)=>{
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = ()=>{ img.src = reader.result; };
+    img.onload = ()=>{
+      let w = img.width, h = img.height;
+      if(w > h && w > maxDim){ h = Math.round(h*maxDim/w); w = maxDim; }
+      else if(h > maxDim){ w = Math.round(w*maxDim/h); h = maxDim; }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    reader.readAsDataURL(blob);
+  });
+}
+function renderBranding(){
+  const preview = document.getElementById('logoPreview');
+  const badge = document.getElementById('headerLogoBadge');
+  if(state.companyLogo){
+    preview.classList.remove('empty'); preview.innerHTML = `<img src="${state.companyLogo}">`;
+    badge.innerHTML = `<img src="${state.companyLogo}">`;
+  } else {
+    preview.classList.add('empty'); preview.innerHTML = 'No logo uploaded<br>(placeholder badge used)';
+    badge.innerHTML = 'JMC';
+  }
+  const sigPreview = document.getElementById('signaturePreview');
+  if(state.eSignature){
+    sigPreview.classList.remove('empty'); sigPreview.innerHTML = `<img src="${state.eSignature}">`;
+  } else {
+    sigPreview.classList.add('empty'); sigPreview.innerHTML = 'No signature uploaded<br>(blank space left in PDF)';
+  }
+  document.getElementById('brandColorInput').value = state.brandColor;
+  applyBrandColor();
+}
+document.getElementById('logoUpload').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  // PNG, not JPEG: JPEG has no alpha channel, so a transparent background gets flattened to
+  // solid black on export — exactly the bug a background-removed logo would hit.
+  state.companyLogo = await compressImagePNG(file, 320);
+  renderBranding(); saveSettings();
+});
+document.getElementById('clearLogoBtn').addEventListener('click', ()=>{
+  state.companyLogo = null; renderBranding(); saveSettings();
+});
+document.getElementById('signatureUpload').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  state.eSignature = await compressImagePNG(file, 300);
+  renderBranding(); saveSettings();
+});
+document.getElementById('clearSignatureBtn').addEventListener('click', ()=>{
+  state.eSignature = null; renderBranding(); saveSettings();
+});
+document.getElementById('brandColorInput').addEventListener('input', e=>{
+  state.brandColor = e.target.value; applyBrandColor(); saveSettings();
+});
+
+// Copy-paste support for the logo and signature boxes (click to focus, then Ctrl+V)
+function wireBrandingPasteBox(boxId, onImage){
+  const box = document.getElementById(boxId);
+  box.addEventListener('click', ()=>{ box.focus(); });
+  box.addEventListener('paste', async (e)=>{
+    const items = (e.clipboardData || window.clipboardData).items;
+    for(const item of items){
+      if(item.type.indexOf('image') !== -1){
+        const blob = item.getAsFile();
+        const dataUrl = await compressImagePNG(blob, 320);
+        onImage(dataUrl);
+        break;
+      }
+    }
+  });
+}
+wireBrandingPasteBox('logoPreview', (dataUrl)=>{ state.companyLogo = dataUrl; renderBranding(); saveSettings(); });
+wireBrandingPasteBox('signaturePreview', (dataUrl)=>{ state.eSignature = dataUrl; renderBranding(); saveSettings(); });
+
+/* ================= PARTS TABLE ================= */
+function materialOptions(selectedId){
+  return state.materials.map(m=>`<option value="${m.id}" ${m.id===selectedId?'selected':''}>${m.name}</option>`).join('');
+}
+function renderPartsMaterialOptions(){
+  document.querySelectorAll('select.mat-select').forEach(sel=>{
+    const partId = +sel.dataset.id;
+    const part = state.parts.find(p=>p.id===partId);
+    if(part) sel.innerHTML = materialOptions(part.materialId);
+  });
+}
+
+function buildPartRowHTML(part){
+  let dimCells = '';
+  if(part.shape==='block'){
+    dimCells = `
+      <td></td>
+      <td><input type="number" class="pf" data-f="t" value="${part.t}"></td>
+      <td><input type="number" class="pf" data-f="w" value="${part.w}"></td>
+      <td><input type="number" class="pf" data-f="l" value="${part.l}"></td>`;
+  } else if(part.shape==='round'){
+    dimCells = `
+      <td><input type="number" class="pf" data-f="dia" value="${part.dia}"></td>
+      <td></td><td></td>
+      <td><input type="number" class="pf" data-f="l" placeholder="length" value="${part.l}"></td>`;
+  } else {
+    dimCells = `<td colspan="4"><input type="number" class="pf" data-f="unitPriceStd" placeholder="Unit price ${state.currency}" value="${part.unitPriceStd}"></td>`;
+  }
+
+  const procCells = PROC_COLS.map(pc=>{
+    const pr = state.processRates[pc.key];
+    if(pr.mode==='auto'){
+      return `<td><input type="number" class="pf proc-input auto-mode" data-f="${pc.key}" data-role="proc-${pc.key}" value="${part[pc.key]}" placeholder="0"><span class="auto-tag">auto</span></td>`;
+    }
+    return `<td><input type="number" class="pf" data-f="${pc.key}" value="${part[pc.key]}"></td>`;
+  }).join('');
+
+  return `
+    <td class="readout">${part.sno}</td>
+    <td class="photo-cell">
+      <div class="photo-box ${part.image?'has-img':''}" tabindex="0" title="Click, then paste (Ctrl+V) an image">
+        ${part.image ? `<img src="${part.image}"><button class="clear-photo" title="Remove photo">×</button>` : 'Click +<br>paste image'}
+      </div>
+    </td>
+    <td class="desc-cell"><input class="pf" data-f="description" value="${part.description}" placeholder="Part description"></td>
+    <td>
+      <select class="pf shape-select" data-f="shape">
+        <option value="block" ${part.shape==='block'?'selected':''}>Block</option>
+        <option value="round" ${part.shape==='round'?'selected':''}>Round</option>
+        <option value="standard" ${part.shape==='standard'?'selected':''}>Std/BOP</option>
+      </select>
+    </td>
+    <td>${part.shape==='standard' ? '<span class="badge-shape">bought-out</span>' : `<select class="pf mat-select" data-id="${part.id}" data-f="materialId">${materialOptions(part.materialId)}</select>`}</td>
+    ${dimCells}
+    <td><input type="number" class="pf" data-f="qty" value="${part.qty}" min="1"></td>
+    <td class="readout" data-role="weight">0.000</td>
+    <td class="readout" data-role="rmCost">${fmt(0)}</td>
+    ${procCells}
+    <td class="readout" data-role="sum">${fmt(0)}</td>
+    <td class="readout" data-role="margin">${fmt(0)}</td>
+    <td class="readout" data-role="subTotal">${fmt(0)}</td>
+    <td class="readout hi" data-role="lineTotal">${fmt(0)}</td>
+    <td style="text-align:center;"><button class="del-btn" title="Remove part">×</button></td>
+  `;
+}
+
+function wirePartRowEvents(tr, part){
+  tr.querySelectorAll('.pf').forEach(inp=>{
+    const evt = (inp.tagName==='SELECT') ? 'change' : 'input';
+    inp.addEventListener(evt, e=>{
+      const f = e.target.dataset.f;
+      part[f] = e.target.value;
+      if(f==='shape'){
+        renderSinglePartRow(part);
+      } else {
+        updateRowComputed(tr, part);
+      }
+    });
+  });
+  tr.querySelector('.del-btn').addEventListener('click', ()=>{
+    state.parts = state.parts.filter(p=>p.id!==part.id);
+    tr.remove();
+    updateTotals();
+  });
+
+  const photoBox = tr.querySelector('.photo-box');
+  photoBox.addEventListener('paste', async (e)=>{
+    const items = (e.clipboardData || window.clipboardData).items;
+    for(const item of items){
+      if(item.type.indexOf('image') !== -1){
+        const blob = item.getAsFile();
+        part.image = await compressImage(blob);
+        renderSinglePartRow(part);
+        break;
+      }
+    }
+  });
+  photoBox.addEventListener('click', (e)=>{
+    if(e.target.classList.contains('clear-photo')){
+      part.image = null; renderSinglePartRow(part); return;
+    }
+    if(part.image){ openLightbox(part.image); }
+    else { photoBox.focus(); }
+  });
+}
+
+function updateRowComputed(tr, part){
+  const c = computePart(part);
+  tr.querySelector('[data-role="weight"]').textContent = c.weight.toFixed(3);
+  tr.querySelector('[data-role="rmCost"]').textContent = fmt(c.rmCost);
+  PROC_COLS.forEach(pc=>{
+    if(state.processRates[pc.key].mode==='auto'){
+      const el = tr.querySelector(`[data-role="proc-${pc.key}"]`);
+      if(el){ el.placeholder = c.procVals[pc.key] ? c.procVals[pc.key].toFixed(0) : '0'; }
+    }
+  });
+  tr.querySelector('[data-role="sum"]').textContent = fmt(c.sum);
+  tr.querySelector('[data-role="margin"]').innerHTML = formatMargin(c.margin, c.marginPct);
+  tr.querySelector('[data-role="subTotal"]').textContent = fmt(c.subTotal);
+  tr.querySelector('[data-role="lineTotal"]').textContent = fmt(c.lineTotal);
+  updateTotals();
+}
+
+function renderSinglePartRow(part){
+  const old = document.querySelector(`tr[data-id="${part.id}"]`);
+  if(!old) return;
+  const tr = document.createElement('tr');
+  tr.dataset.id = part.id;
+  tr.innerHTML = buildPartRowHTML(part);
+  old.replaceWith(tr);
+  wirePartRowEvents(tr, part);
+  updateRowComputed(tr, part);
+}
+
+function renderParts(){
+  const tbody = document.getElementById('partsBody');
+  tbody.innerHTML = '';
+  state.parts.forEach(part=>{
+    const tr = document.createElement('tr');
+    tr.dataset.id = part.id;
+    tr.innerHTML = buildPartRowHTML(part);
+    tbody.appendChild(tr);
+    wirePartRowEvents(tr, part);
+    updateRowComputed(tr, part);
+  });
+  updateTotals();
+}
+
+/* recompute every row's readouts without rebuilding inputs (e.g. after a Rate Master change) */
+function recalcReadouts(){
+  document.querySelectorAll('#partsBody tr').forEach(tr=>{
+    const part = state.parts.find(p=>p.id===+tr.dataset.id);
+    if(part) updateRowComputed(tr, part);
+  });
+  updateTotals();
+}
+
+document.getElementById('addPartBtn').addEventListener('click', ()=>{ state.parts.push(newPart()); renderParts(); });
+
+/* ================= EXTRA ITEMS ================= */
+function renderExtras(){
+  const box = document.getElementById('extraItemsBody');
+  box.innerHTML = '';
+  state.extraItems.forEach((item, i)=>{
+    const row = document.createElement('div');
+    row.className = 'extra-row';
+    row.innerHTML = `
+      <input value="${item.description}" data-i="${i}" data-f="description" placeholder="Line item description">
+      <input type="number" value="${item.amount}" data-i="${i}" data-f="amount" class="num">
+      <button class="del-btn">×</button>`;
+    box.appendChild(row);
+    row.querySelectorAll('input').forEach(inp=>{
+      inp.addEventListener('input', e=>{
+        const i = +e.target.dataset.i, f = e.target.dataset.f;
+        state.extraItems[i][f] = f==='amount' ? num(e.target.value) : e.target.value;
+        updateTotals();
+      });
+    });
+    row.querySelector('.del-btn').addEventListener('click', ()=>{
+      state.extraItems.splice(i,1); renderExtras(); updateTotals();
+    });
+  });
+}
+document.getElementById('addExtraBtn').addEventListener('click', ()=>{
+  state.extraItems.push({description:'', amount:0}); renderExtras();
+});
+
+/* ================= TOTALS ================= */
+function updateTotals(){
+  const partsTotal = state.parts.reduce((s,p)=>s+computePart(p).lineTotal,0);
+  const extraTotal = state.extraItems.reduce((s,e)=>s+num(e.amount),0);
+  const grand = partsTotal + extraTotal;
+  document.getElementById('grandTotalDisplay').textContent = fmt(grand);
+  document.getElementById('partsSubtotal').textContent = fmt(partsTotal);
+  document.getElementById('extraSubtotal').textContent = fmt(extraTotal);
+  document.getElementById('partCount').textContent = state.parts.length;
+}
+
+/* ================= TABS ================= */
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-'+tab.dataset.tab).classList.add('active');
+  });
+});
+
+document.getElementById('stockAllowance').addEventListener('input', e=>{ state.stockAllowance = num(e.target.value); recalcReadouts(); saveSettings(); });
+document.getElementById('defaultMargin').addEventListener('input', e=>{ state.defaultMargin = num(e.target.value); recalcReadouts(); saveSettings(); });
+document.getElementById('qMargin').addEventListener('input', recalcReadouts);
+document.getElementById('currencySymbol').addEventListener('input', e=>{ state.currency = e.target.value || '₹'; recalcReadouts(); saveSettings(); });
+document.getElementById('marginDisplayMode').addEventListener('change', e=>{ state.marginDisplayMode = e.target.value; recalcReadouts(); saveSettings(); });
+
+/* ================= LIGHTBOX ================= */
+function openLightbox(src){
+  document.getElementById('lightboxImg').src = src;
+  document.getElementById('lightbox').classList.add('open');
+}
+document.getElementById('lightbox').addEventListener('click', ()=>{
+  document.getElementById('lightbox').classList.remove('open');
+});
+
+/* ================= EXPORT: PDF (landscape, branded, configurable columns) ================= */
+document.getElementById('exportPdfBtn').addEventListener('click', ()=>{
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:'pt', format:'a4', orientation:'landscape'});
+  const margin = 36;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const usableWidth = pageWidth - margin*2;
+  const [br,bg,bb] = hexToRgb(state.brandColor);
+  // jsPDF's built-in fonts (helvetica/times/courier) have no glyph for ₹ — falls back to a
+  // garbled character. Use "Rs." for any INR-style symbol in the PDF; pass other symbols through.
+  const pdfCurrencyLabel = (state.currency === '₹' || state.currency === 'Rs' || state.currency === 'Rs.') ? 'Rs. ' : (state.currency + ' ');
+  function pdfCurrency(amount){ return pdfCurrencyLabel + Number(amount).toLocaleString('en-IN',{maximumFractionDigits:0}); }
+  let y = margin;
+
+  doc.setFillColor(27,33,40); doc.rect(0,0,pageWidth,74,'F');
+  if(state.companyLogo){
+    try{ doc.addImage(state.companyLogo, imgFormatFromDataUrl(state.companyLogo), margin, 10, 60, 54); }catch(err){ console.warn('logo embed failed', err); }
+  }
+  const textX = state.companyLogo ? margin+72 : margin;
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(20);
+  doc.text('JMC ENGINEERING', textX, 34);
+  doc.setTextColor(230,230,230); doc.setFont('helvetica','normal'); doc.setFontSize(9.5);
+  doc.text('Padi, Chennai · Jigs · Fixtures · Press Tools · Plastic Moulds', textX, 50);
+  doc.text('GSTIN: 33AXRPJ5951H1Z5   |   Ph: 7305187874', textX, 63);
+  y = 96;
+
+  doc.setTextColor(30,30,30); doc.setFont('helvetica','bold'); doc.setFontSize(13);
+  doc.text('QUOTATION', margin, y); y += 18;
+  doc.setFont('helvetica','normal'); doc.setFontSize(10);
+  const qn = document.getElementById('qQuoteNo').value || '-';
+  const pn = document.getElementById('qPartNo').value || '-';
+  const pname = document.getElementById('qPartName').value || '-';
+  const cust = document.getElementById('qCustomer').value || '-';
+  const oper = document.getElementById('qOperation').value || '-';
+  const dt = document.getElementById('qDate').value || new Date().toISOString().slice(0,10);
+  const valDays = document.getElementById('qValidity').value || 15;
+  doc.text(`Quote No: ${qn}      Date: ${dt}      Validity: ${valDays} days`, margin, y); y+=14;
+  doc.text(`Part No: ${pn}      Part Name: ${pname}      Operation: ${oper}`, margin, y); y+=14;
+  doc.text(`Customer: ${cust}`, margin, y); y+=18;
+
+  const showPhoto = state.pdfColumns.photo && state.parts.some(p=>p.image);
+  const costColDefs = [{key:'rmCost', label:'RM Cost'}].concat(PROC_COLS.map(c=>({key:c.key,label:c.label})));
+  const activeCols = costColDefs.filter(cc=>{
+    if(!state.pdfColumns[cc.key]) return false;
+    if(!state.pdfAutoHide) return true;
+    return state.parts.some(p=>{
+      const c = computePart(p);
+      return cc.key==='rmCost' ? c.rmCost > 0 : c.procVals[cc.key] > 0;
+    });
+  });
+
+  const tailCols = [
+    {key:'sum', label:'Sum'}, {key:'margin', label:'Margin'},
+    {key:'subTotal', label:'Sub Total'}, {key:'lineTotal', label:'Line Total'}
+  ].filter(c=>state.pdfColumns[c.key]);
+
+  const head = [[ 'S.No', ...(showPhoto?['Photo']:[]), 'Description','Qty',
+    ...activeCols.map(c=>c.label), ...tailCols.map(c=>c.label) ]];
+  const photoColIdx = showPhoto ? 1 : -1;
+
+  const body = state.parts.map(p=>{
+    const c = computePart(p);
+    const row = [p.sno];
+    if(showPhoto) row.push('');
+    row.push(p.description||'-', p.qty);
+    activeCols.forEach(cc=>{
+      const val = cc.key==='rmCost' ? c.rmCost : c.procVals[cc.key];
+      row.push(val ? val.toFixed(0) : '-');
+    });
+    tailCols.forEach(tc=>{
+      if(tc.key==='sum') row.push(c.sum.toFixed(0));
+      else if(tc.key==='margin'){
+        // formatMargin() (used in the app) prepends state.currency (₹), which jsPDF's font can't
+        // render — same issue the Grand Total line had. Every other column here is a bare number
+        // with no symbol, so match that instead of routing ₹ through jsPDF at all.
+        if(state.marginDisplayMode==='amount') row.push(c.margin.toFixed(0));
+        else if(state.marginDisplayMode==='percent') row.push(c.marginPct+'%');
+        else row.push(c.margin.toFixed(0)+` (${c.marginPct}%)`);
+      }
+      else if(tc.key==='subTotal') row.push(c.subTotal.toFixed(0));
+      else if(tc.key==='lineTotal') row.push(c.lineTotal.toFixed(0));
+    });
+    return row;
+  });
+
+  doc.autoTable({
+    head, body, startY: y, margin:{left:margin,right:margin},
+    tableWidth: usableWidth,
+    theme: 'grid',
+    styles:{fontSize:9, cellPadding:4, font:'helvetica', minCellHeight: showPhoto?42:0, lineWidth:0.4, lineColor:[224,218,204]},
+    headStyles:{fillColor:[27,33,40], textColor:[240,240,240], fontStyle:'bold', lineColor:[27,33,40]},
+    alternateRowStyles:{fillColor:[248,246,240]},
+    columnStyles: showPhoto ? {1:{cellWidth:46}, 2:{cellWidth:130}} : {1:{cellWidth:150}},
+    didDrawCell: (data)=>{
+      if(data.section==='body' && data.column.index===photoColIdx){
+        const p = state.parts[data.row.index];
+        if(p && p.image){
+          const pad = 3;
+          try{ doc.addImage(p.image, 'JPEG', data.cell.x+pad, data.cell.y+pad, data.cell.width-pad*2, data.cell.height-pad*2); }
+          catch(err){ console.warn('PDF image embed failed for row', data.row.index, err); }
+        }
+      }
+    }
+  });
+
+  let finalY = doc.lastAutoTable.finalY + 16;
+  if(state.extraItems.length){
+    doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(30,30,30); doc.text('Additional Charges', margin, finalY); finalY += 4;
+    const exBody = state.extraItems.filter(e=>e.description).map(e=>[e.description, num(e.amount).toFixed(0)]);
+    doc.autoTable({ body: exBody, startY: finalY+4, margin:{left:margin,right:margin}, tableWidth: usableWidth/2,
+      styles:{fontSize:9.5, cellPadding:4, lineWidth:0.4, lineColor:[224,218,204]}, theme:'grid',
+      columnStyles:{1:{halign:'right', cellWidth:110}} });
+    finalY = doc.lastAutoTable.finalY + 12;
+  }
+
+  const partsTotal = state.parts.reduce((s,p)=>s+computePart(p).lineTotal,0);
+  const extraTotal = state.extraItems.reduce((s,e)=>s+num(e.amount),0);
+  const grand = partsTotal + extraTotal;
+  doc.setDrawColor(br,bg,bb); doc.setLineWidth(1); doc.line(margin, finalY, pageWidth-margin, finalY); finalY += 22;
+  doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(br,bg,bb);
+  doc.text(`GRAND TOTAL:  ${pdfCurrency(grand)}`, margin, finalY);
+
+  // signature block, using the freed-up right-hand space — drawn once, wherever the content
+  // ends up landing on the LAST page (doc's "current page" naturally follows the table/summary
+  // content above, even if the parts table itself paginated across several pages).
+  const sigY = Math.min(finalY, pageHeight-110);
+  doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(60,60,60);
+  doc.text('For JMC ENGINEERING', pageWidth-margin, sigY, {align:'right'});
+  let sigLabelY = sigY + 34;
+  if(state.eSignature){
+    const sigW = 110, sigH = 40;
+    try{ doc.addImage(state.eSignature, 'PNG', pageWidth-margin-sigW, sigY+6, sigW, sigH); sigLabelY = sigY + 6 + sigH + 12; }
+    catch(err){ console.warn('signature embed failed', err); }
+  }
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+  doc.text('Authorized Signatory', pageWidth-margin, sigLabelY, {align:'right'});
+
+  finalY = Math.max(finalY, sigLabelY) + 4;
+
+  finalY += 26;
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(100,100,100);
+  doc.text('Prices in INR, Ex-Works Padi, Chennai. Taxes as applicable. Subject to JMC Engineering standard terms.', margin, finalY);
+
+  doc.save(`${qn||'JMC-Quote'}.pdf`);
+});
+
+/* ================= EXPORT: EXCEL (all columns, live formulas) ================= */
+document.getElementById('exportXlsxBtn').addEventListener('click', ()=>{
+  const wb = XLSX.utils.book_new();
+  const rows = [];
+  rows.push(['JMC ENGINEERING']);
+  rows.push([`Quote No: ${document.getElementById('qQuoteNo').value}`]);
+  rows.push([`Part No: ${document.getElementById('qPartNo').value}`, '', `Part Name: ${document.getElementById('qPartName').value}`, '', `Operation: ${document.getElementById('qOperation').value}`]);
+  rows.push([`Customer: ${document.getElementById('qCustomer').value}`, '', `Date: ${document.getElementById('qDate').value}`]);
+  rows.push([]);
+  const header = ['S.No','Description','Shape','Material','Dia','T','W','L','Qty','Weight(kg)','RM Rate/kg','RM Cost',
+    ...PROC_COLS.map(c=>c.label), 'Sum','Margin %','Margin','Sub Total /pc','Line Total','Photo'];
+  rows.push(header);
+  const dataStartRow = rows.length;
+
+  state.parts.forEach(p=>{
+    const c = computePart(p);
+    const mat = state.materials.find(m=>m.id===p.materialId) || {rate:0};
+    rows.push([
+      p.sno, p.description, p.shape, p.shape==='standard'?'—':(mat.name||''),
+      p.shape==='round'?num(p.dia):'', p.shape==='block'?num(p.t):'', p.shape==='block'?num(p.w):'', (p.shape!=='standard')?num(p.l):'',
+      num(p.qty), Number(c.weight.toFixed(4)), p.shape==='standard'?'':mat.rate, Number(c.rmCost.toFixed(2)),
+      ...PROC_COLS.map(pc=>Number(c.procVals[pc.key].toFixed(2))),
+      Number(c.sum.toFixed(2)), c.marginPct, Number(c.margin.toFixed(2)), Number(c.subTotal.toFixed(2)), Number(c.lineTotal.toFixed(2)),
+      p.image ? 'Photo attached — see PDF export' : ''
+    ]);
+  });
+
+  rows.push([]);
+  const extraStart = rows.length;
+  state.extraItems.forEach(e=>{ rows.push([e.description, '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', num(e.amount)]); });
+  rows.push([]);
+  const grandRow = rows.length;
+  rows.push(['GRAND TOTAL']);
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+
+  const col = {sno:0,desc:1,shape:2,mat:3,dia:4,t:5,w:6,l:7,qty:8,wt:9,rate:10,rm:11, procStart:12};
+  const procCount = PROC_COLS.length;
+  const sumCol = col.procStart+procCount;
+  const marginPctCol = sumCol+1;
+  const marginCol = sumCol+2;
+  const subTotalCol = sumCol+3;
+  const L = (c,r)=> XLSX.utils.encode_cell({c,r});
+
+  state.parts.forEach((p,i)=>{
+    const r = dataStartRow + i;
+    const rmCell = L(col.rm, r);
+    ws[rmCell] = {t:'n', f:`${L(col.wt,r)}*${L(col.rate,r)}`};
+    const procFirstCell = L(col.procStart, r);
+    const procLastCell = L(col.procStart+procCount-1, r);
+    const sumCell = L(sumCol, r);
+    ws[sumCell] = {t:'n', f:`${rmCell}+SUM(${procFirstCell}:${procLastCell})`};
+    const marginCell = L(marginCol, r);
+    ws[marginCell] = {t:'n', f:`${sumCell}*${L(marginPctCol,r)}/100`};
+    const subTotalCell = L(subTotalCol, r);
+    ws[subTotalCell] = {t:'n', f:`${sumCell}+${marginCell}`};
+    const lineTotalCell = L(subTotalCol+1, r);
+    ws[lineTotalCell] = {t:'n', f:`${subTotalCell}*${L(col.qty,r)}`};
+  });
+
+  const lastPartRow = dataStartRow + state.parts.length - 1;
+  const lineTotalColIdx = subTotalCol+1;
+  const extraAmountColIdx = 21;
+  const grandCell = L(1, grandRow);
+  if(state.parts.length && state.extraItems.length){
+    ws[grandCell] = {t:'n', f:`SUM(${L(lineTotalColIdx,dataStartRow)}:${L(lineTotalColIdx,lastPartRow)})+SUM(${L(extraAmountColIdx,extraStart)}:${L(extraAmountColIdx,extraStart+state.extraItems.length-1)})`};
+  } else if(state.parts.length){
+    ws[grandCell] = {t:'n', f:`SUM(${L(lineTotalColIdx,dataStartRow)}:${L(lineTotalColIdx,lastPartRow)})`};
+  }
+
+  ws['!cols'] = header.map(()=>({wch:12}));
+  XLSX.utils.book_append_sheet(wb, ws, (document.getElementById('qQuoteNo').value || 'Quote').slice(0,28));
+  XLSX.writeFile(wb, `${document.getElementById('qQuoteNo').value || 'JMC-Quote'}.xlsx`);
+});
+
+/* ================= MSAL ================= */
+const msalConfig = {
+  auth: {
+    clientId: '248daf88-bf2b-4f29-9295-ab2e707fa3ef',
+    authority: 'https://login.microsoftonline.com/ae273161-7bde-4004-9e52-0ebbee8e3c0d',
+    redirectUri: window.location.href
+  }
+};
+let msalInstance;
+try { msalInstance = new msal.PublicClientApplication(msalConfig); } catch(e){ console.warn('MSAL not loaded', e); }
+
+document.getElementById('signInBtn').addEventListener('click', async ()=>{
+  const pill = document.getElementById('authPill');
+  if(!msalInstance){ alert('MSAL library did not load.'); return; }
+  try{
+    const res = await msalInstance.loginPopup({ scopes:['User.Read','Files.ReadWrite'] });
+    pill.textContent = 'Signed in: ' + res.account.username;
+    pill.classList.add('signed');
+  }catch(err){
+    console.warn(err);
+    alert('Sign-in did not complete. This preview runs on a sandboxed origin that is not registered as a redirect URI for the JMC Azure app — this will work once deployed to your GitHub Pages / Azure Static Web App URL (same as the Order Tracker). See the "What Changed & Why" tab.');
+  }
+});
+
+/* ================= INIT ================= */
+async function init(){
+  const storagePill = document.getElementById('storagePill');
+  const storageNote = document.getElementById('storageNote');
+  if(storageAvailable){
+    await loadSettings();
+    storagePill.textContent = 'Settings auto-save: on';
+    storageNote.textContent = 'Logo, rates and PDF column choices save automatically in this Claude session and reload next time you open this tool here.';
+  } else {
+    storagePill.textContent = 'Settings auto-save: off (standalone file)';
+    storagePill.classList.add('storage-off');
+    storageNote.textContent = "This copy is running outside Claude's preview, so nothing here persists automatically between visits yet — that lands with the OneDrive backend in Phase 2. Re-upload your logo/rates if you reopen the file fresh.";
+  }
+  document.getElementById('qDate').value = new Date().toISOString().slice(0,10);
+  state.parts.push(newPart(), newPart());
+  renderMaterials();
+  renderProcessRates();
+  renderPdfColumnToggles();
+  document.getElementById('pdfAutoHide').checked = state.pdfAutoHide;
+  document.getElementById('marginDisplayMode').value = state.marginDisplayMode;
+  renderBranding();
+  renderExtras();
+  renderParts();
+}
+init();
+</script>
+</body>
+</html>
