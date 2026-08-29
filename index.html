@@ -133,14 +133,15 @@
      cells from row 1 don't repeat there — so freezing by nth-child mismatches row1 vs row2.
      Explicit classes on the row-1 header cells avoid that; tbody rows have no rowspan so
      nth-child stays safe there. */
-  table.parts th.freeze-sno, table.parts td:nth-child(1){position:sticky; left:0; width:40px; min-width:40px;}
-  table.parts th.freeze-photo, table.parts td:nth-child(2){position:sticky; left:40px; width:60px; min-width:60px;}
-  table.parts th.freeze-desc, table.parts td:nth-child(3){position:sticky; left:100px; width:150px; min-width:150px;}
-  table.parts th.freeze-shape, table.parts td:nth-child(4){position:sticky; left:250px; width:72px; min-width:72px;}
-  table.parts th.freeze-material, table.parts td:nth-child(5){position:sticky; left:322px; width:96px; min-width:96px; border-right:2px solid var(--brass);}
-  table.parts tbody td:nth-child(-n+5){background:var(--paper-panel); z-index:2;}
-  table.parts tbody tr:nth-child(even) td:nth-child(-n+5){background:#faf8f2;}
-  table.parts thead th.freeze-sno, table.parts thead th.freeze-photo, table.parts thead th.freeze-desc,
+  table.parts th.freeze-sno, table.parts td:nth-child(1){position:sticky; left:0; width:34px; min-width:34px;}
+  table.parts th.freeze-partno, table.parts td:nth-child(2){position:sticky; left:34px; width:58px; min-width:58px;}
+  table.parts th.freeze-photo, table.parts td:nth-child(3){position:sticky; left:92px; width:60px; min-width:60px;}
+  table.parts th.freeze-desc, table.parts td:nth-child(4){position:sticky; left:152px; width:140px; min-width:140px;}
+  table.parts th.freeze-shape, table.parts td:nth-child(5){position:sticky; left:292px; width:70px; min-width:70px;}
+  table.parts th.freeze-material, table.parts td:nth-child(6){position:sticky; left:362px; width:90px; min-width:90px; border-right:2px solid var(--brass);}
+  table.parts tbody td:nth-child(-n+6){background:var(--paper-panel); z-index:2;}
+  table.parts tbody tr:nth-child(even) td:nth-child(-n+6){background:#faf8f2;}
+  table.parts thead th.freeze-sno, table.parts thead th.freeze-partno, table.parts thead th.freeze-photo, table.parts thead th.freeze-desc,
   table.parts thead th.freeze-shape, table.parts thead th.freeze-material{z-index:3; background:var(--graphite-900);}
 
   .proc-input.auto-mode{background:#fbf6ec;}
@@ -352,6 +353,7 @@
           <thead>
             <tr>
               <th rowspan="2" class="freeze-sno">S.No</th>
+              <th rowspan="2" class="freeze-partno">Part No</th>
               <th rowspan="2" class="freeze-photo">Photo</th>
               <th rowspan="2" class="freeze-desc">Description</th>
               <th rowspan="2" class="freeze-shape">Shape</th>
@@ -446,6 +448,11 @@
         <p><b>Fixed</b> — Background-removed logos turning solid black on upload. The logo box was compressing everything to JPEG, which has no transparency channel — any see-through pixel got flattened to black on export. Both the logo and signature boxes now keep PNG transparency end to end.</p>
         <p><b>Added</b> — Copy-paste for the logo and signature boxes too, same as the per-part photo fields: click the box, then Ctrl+V.</p>
         <p><b>Added</b> — Real persistence: sign in with Microsoft and quotes save to a OneDrive folder you name (Rate Master → OneDrive Storage), with a Saved Quotes tab to browse and reload them. Rate Master settings sync there too, so they survive on the deployed site, not just inside Claude.</p>
+        <p><b>Fixed</b> — PDF header band now uses your actual brand color instead of a fixed dark graphite fill.</p>
+        <p><b>Fixed</b> — "QUOTATION" moved to top-right of the details block, level with the first detail line — standard letterhead layout instead of stacked on the left.</p>
+        <p><b>Added</b> — Quote No. auto-fills with a date-based suggestion (JMC-YYYYMMDD) on load — still fully editable, so your EW-#### job numbers work exactly as before.</p>
+        <p><b>Fixed</b> — S.No and Part No were the same number before (both showing "101, 102..."). Split into two columns: S.No is now a true running count (1, 2, 3...), and Part No is its own editable field defaulting to the old 101-style numbering.</p>
+        <p><b>Fixed</b> — Pasted photos were being stretched to exactly fill the table cell, distorting non-square images. Now sized to fit within the cell without distortion (like CSS object-fit: contain), centered in whatever space is left over.</p>
       </div>
     </div>
     <div class="card">
@@ -511,7 +518,8 @@ const state = {
 
 let partSeq = 1;
 function newPart(){
-  const p = { id: partSeq++, sno: 100+partSeq, description:'', shape:'block', materialId: state.materials[0]?.id||'', dia:'', t:'', w:'', l:'', qty:1, unitPriceStd:'', marginOverride:'', image:null };
+  const seq = partSeq++;
+  const p = { id: seq, partNo: 100+seq, description:'', shape:'block', materialId: state.materials[0]?.id||'', dia:'', t:'', w:'', l:'', qty:1, unitPriceStd:'', marginOverride:'', image:null };
   PROC_COLS.forEach(c=>p[c.key]='');
   return p;
 }
@@ -835,7 +843,7 @@ function renderPartsMaterialOptions(){
   });
 }
 
-function buildPartRowHTML(part){
+function buildPartRowHTML(part, displayIndex){
   let dimCells = '';
   if(part.shape==='block'){
     dimCells = `
@@ -861,7 +869,8 @@ function buildPartRowHTML(part){
   }).join('');
 
   return `
-    <td class="readout">${part.sno}</td>
+    <td class="readout">${displayIndex+1}</td>
+    <td><input type="text" class="pf" data-f="partNo" value="${part.partNo!=null?part.partNo:''}" placeholder="e.g. 101"></td>
     <td class="photo-cell">
       <div class="photo-box ${part.image?'has-img':''}" tabindex="0" title="Click, then paste (Ctrl+V) an image">
         ${part.image ? `<img src="${part.image}"><button class="clear-photo" title="Remove photo">×</button>` : 'Click +<br>paste image'}
@@ -903,9 +912,9 @@ function wirePartRowEvents(tr, part){
     });
   });
   tr.querySelector('.del-btn').addEventListener('click', ()=>{
+    // Full re-render (not just removing this row) so every remaining row's S.No renumbers correctly.
     state.parts = state.parts.filter(p=>p.id!==part.id);
-    tr.remove();
-    updateTotals();
+    renderParts();
   });
 
   const photoBox = tr.querySelector('.photo-box');
@@ -949,9 +958,10 @@ function updateRowComputed(tr, part){
 function renderSinglePartRow(part){
   const old = document.querySelector(`tr[data-id="${part.id}"]`);
   if(!old) return;
+  const idx = state.parts.findIndex(p=>p.id===part.id);
   const tr = document.createElement('tr');
   tr.dataset.id = part.id;
-  tr.innerHTML = buildPartRowHTML(part);
+  tr.innerHTML = buildPartRowHTML(part, idx<0?0:idx);
   old.replaceWith(tr);
   wirePartRowEvents(tr, part);
   updateRowComputed(tr, part);
@@ -960,10 +970,10 @@ function renderSinglePartRow(part){
 function renderParts(){
   const tbody = document.getElementById('partsBody');
   tbody.innerHTML = '';
-  state.parts.forEach(part=>{
+  state.parts.forEach((part, idx)=>{
     const tr = document.createElement('tr');
     tr.dataset.id = part.id;
-    tr.innerHTML = buildPartRowHTML(part);
+    tr.innerHTML = buildPartRowHTML(part, idx);
     tbody.appendChild(tr);
     wirePartRowEvents(tr, part);
     updateRowComputed(tr, part);
@@ -1047,7 +1057,15 @@ document.getElementById('lightbox').addEventListener('click', ()=>{
 });
 
 /* ================= EXPORT: PDF (landscape, branded, configurable columns) ================= */
-document.getElementById('exportPdfBtn').addEventListener('click', ()=>{
+function getImageNaturalSize(dataUrl){
+  return new Promise((resolve)=>{
+    const img = new Image();
+    img.onload = ()=> resolve({w: img.naturalWidth || 1, h: img.naturalHeight || 1});
+    img.onerror = ()=> resolve({w:1, h:1});
+    img.src = dataUrl;
+  });
+}
+document.getElementById('exportPdfBtn').addEventListener('click', async ()=>{
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({unit:'pt', format:'a4', orientation:'landscape'});
   const margin = 36;
@@ -1061,7 +1079,7 @@ document.getElementById('exportPdfBtn').addEventListener('click', ()=>{
   function pdfCurrency(amount){ return pdfCurrencyLabel + Number(amount).toLocaleString('en-IN',{maximumFractionDigits:0}); }
   let y = margin;
 
-  doc.setFillColor(27,33,40); doc.rect(0,0,pageWidth,74,'F');
+  doc.setFillColor(br,bg,bb); doc.rect(0,0,pageWidth,74,'F');
   if(state.companyLogo){
     try{ doc.addImage(state.companyLogo, imgFormatFromDataUrl(state.companyLogo), margin, 10, 60, 54); }catch(err){ console.warn('logo embed failed', err); }
   }
@@ -1073,9 +1091,9 @@ document.getElementById('exportPdfBtn').addEventListener('click', ()=>{
   doc.text('GSTIN: 33AXRPJ5951H1Z5   |   Ph: 7305187874', textX, 63);
   y = 96;
 
-  doc.setTextColor(30,30,30); doc.setFont('helvetica','bold'); doc.setFontSize(13);
-  doc.text('QUOTATION', margin, y); y += 18;
-  doc.setFont('helvetica','normal'); doc.setFontSize(10);
+  doc.setTextColor(30,30,30); doc.setFont('helvetica','bold'); doc.setFontSize(16);
+  doc.text('QUOTATION', pageWidth-margin, y+4, {align:'right'});
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(30,30,30);
   const qn = document.getElementById('qQuoteNo').value || '-';
   const pn = document.getElementById('qPartNo').value || '-';
   const pname = document.getElementById('qPartName').value || '-';
@@ -1103,13 +1121,13 @@ document.getElementById('exportPdfBtn').addEventListener('click', ()=>{
     {key:'subTotal', label:'Sub Total'}, {key:'lineTotal', label:'Line Total'}
   ].filter(c=>state.pdfColumns[c.key]);
 
-  const head = [[ 'S.No', ...(showPhoto?['Photo']:[]), 'Description','Qty',
+  const head = [[ 'S.No', 'Part No', ...(showPhoto?['Photo']:[]), 'Description','Qty',
     ...activeCols.map(c=>c.label), ...tailCols.map(c=>c.label) ]];
-  const photoColIdx = showPhoto ? 1 : -1;
+  const photoColIdx = showPhoto ? 2 : -1;
 
-  const body = state.parts.map(p=>{
+  const body = state.parts.map((p, idx)=>{
     const c = computePart(p);
-    const row = [p.sno];
+    const row = [idx+1, p.partNo!=null?p.partNo:'-'];
     if(showPhoto) row.push('');
     row.push(p.description||'-', p.qty);
     activeCols.forEach(cc=>{
@@ -1132,6 +1150,8 @@ document.getElementById('exportPdfBtn').addEventListener('click', ()=>{
     return row;
   });
 
+  const imageDims = await Promise.all(state.parts.map(p => p.image ? getImageNaturalSize(p.image) : Promise.resolve(null)));
+
   doc.autoTable({
     head, body, startY: y, margin:{left:margin,right:margin},
     tableWidth: usableWidth,
@@ -1139,13 +1159,22 @@ document.getElementById('exportPdfBtn').addEventListener('click', ()=>{
     styles:{fontSize:9, cellPadding:4, font:'helvetica', minCellHeight: showPhoto?42:0, lineWidth:0.4, lineColor:[224,218,204]},
     headStyles:{fillColor:[27,33,40], textColor:[240,240,240], fontStyle:'bold', lineColor:[27,33,40]},
     alternateRowStyles:{fillColor:[248,246,240]},
-    columnStyles: showPhoto ? {1:{cellWidth:46}, 2:{cellWidth:130}} : {1:{cellWidth:150}},
+    columnStyles: showPhoto ? {1:{cellWidth:50}, 2:{cellWidth:46}, 3:{cellWidth:120}} : {1:{cellWidth:50}, 2:{cellWidth:150}},
     didDrawCell: (data)=>{
       if(data.section==='body' && data.column.index===photoColIdx){
         const p = state.parts[data.row.index];
-        if(p && p.image){
+        const dims = imageDims[data.row.index];
+        if(p && p.image && dims){
           const pad = 3;
-          try{ doc.addImage(p.image, 'JPEG', data.cell.x+pad, data.cell.y+pad, data.cell.width-pad*2, data.cell.height-pad*2); }
+          const availW = data.cell.width - pad*2;
+          const availH = data.cell.height - pad*2;
+          // Fit within the cell without distorting the original aspect ratio — same idea as
+          // CSS object-fit:contain, centered in whatever space is left over either direction.
+          const scale = Math.min(availW/dims.w, availH/dims.h);
+          const drawW = dims.w*scale, drawH = dims.h*scale;
+          const drawX = data.cell.x + (data.cell.width-drawW)/2;
+          const drawY = data.cell.y + (data.cell.height-drawH)/2;
+          try{ doc.addImage(p.image, 'JPEG', drawX, drawY, drawW, drawH); }
           catch(err){ console.warn('PDF image embed failed for row', data.row.index, err); }
         }
       }
@@ -1202,16 +1231,25 @@ document.getElementById('exportXlsxBtn').addEventListener('click', ()=>{
   rows.push([`Part No: ${document.getElementById('qPartNo').value}`, '', `Part Name: ${document.getElementById('qPartName').value}`, '', `Operation: ${document.getElementById('qOperation').value}`]);
   rows.push([`Customer: ${document.getElementById('qCustomer').value}`, '', `Date: ${document.getElementById('qDate').value}`]);
   rows.push([]);
-  const header = ['S.No','Description','Shape','Material','Dia','T','W','L','Qty','Weight(kg)','RM Rate/kg','RM Cost',
+  const header = ['S.No','Part No','Description','Shape','Material','Dia','T','W','L','Qty','Weight(kg)','RM Rate/kg','RM Cost',
     ...PROC_COLS.map(c=>c.label), 'Sum','Margin %','Margin','Sub Total /pc','Line Total','Photo'];
   rows.push(header);
   const dataStartRow = rows.length;
 
-  state.parts.forEach(p=>{
+  const col = {sno:0,partNo:1,desc:2,shape:3,mat:4,dia:5,t:6,w:7,l:8,qty:9,wt:10,rate:11,rm:12, procStart:13};
+  const procCount = PROC_COLS.length;
+  const sumCol = col.procStart+procCount;
+  const marginPctCol = sumCol+1;
+  const marginCol = sumCol+2;
+  const subTotalCol = sumCol+3;
+  const lineTotalColIdx = subTotalCol+1;
+  const L = (c,r)=> XLSX.utils.encode_cell({c,r});
+
+  state.parts.forEach((p, idx)=>{
     const c = computePart(p);
     const mat = state.materials.find(m=>m.id===p.materialId) || {rate:0};
     rows.push([
-      p.sno, p.description, p.shape, p.shape==='standard'?'—':(mat.name||''),
+      idx+1, p.partNo!=null?p.partNo:'', p.description, p.shape, p.shape==='standard'?'—':(mat.name||''),
       p.shape==='round'?num(p.dia):'', p.shape==='block'?num(p.t):'', p.shape==='block'?num(p.w):'', (p.shape!=='standard')?num(p.l):'',
       num(p.qty), Number(c.weight.toFixed(4)), p.shape==='standard'?'':mat.rate, Number(c.rmCost.toFixed(2)),
       ...PROC_COLS.map(pc=>Number(c.procVals[pc.key].toFixed(2))),
@@ -1222,20 +1260,17 @@ document.getElementById('exportXlsxBtn').addEventListener('click', ()=>{
 
   rows.push([]);
   const extraStart = rows.length;
-  state.extraItems.forEach(e=>{ rows.push([e.description, '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', num(e.amount)]); });
+  state.extraItems.forEach(e=>{
+    const row = new Array(lineTotalColIdx+1).fill('');
+    row[0] = e.description;
+    row[lineTotalColIdx] = num(e.amount);
+    rows.push(row);
+  });
   rows.push([]);
   const grandRow = rows.length;
   rows.push(['GRAND TOTAL']);
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
-
-  const col = {sno:0,desc:1,shape:2,mat:3,dia:4,t:5,w:6,l:7,qty:8,wt:9,rate:10,rm:11, procStart:12};
-  const procCount = PROC_COLS.length;
-  const sumCol = col.procStart+procCount;
-  const marginPctCol = sumCol+1;
-  const marginCol = sumCol+2;
-  const subTotalCol = sumCol+3;
-  const L = (c,r)=> XLSX.utils.encode_cell({c,r});
 
   state.parts.forEach((p,i)=>{
     const r = dataStartRow + i;
@@ -1249,14 +1284,13 @@ document.getElementById('exportXlsxBtn').addEventListener('click', ()=>{
     ws[marginCell] = {t:'n', f:`${sumCell}*${L(marginPctCol,r)}/100`};
     const subTotalCell = L(subTotalCol, r);
     ws[subTotalCell] = {t:'n', f:`${sumCell}+${marginCell}`};
-    const lineTotalCell = L(subTotalCol+1, r);
+    const lineTotalCell = L(lineTotalColIdx, r);
     ws[lineTotalCell] = {t:'n', f:`${subTotalCell}*${L(col.qty,r)}`};
   });
 
   const lastPartRow = dataStartRow + state.parts.length - 1;
-  const lineTotalColIdx = subTotalCol+1;
-  const extraAmountColIdx = 21;
-  const grandCell = L(1, grandRow);
+  const extraAmountColIdx = lineTotalColIdx;
+  const grandCell = L(lineTotalColIdx, grandRow);
   if(state.parts.length && state.extraItems.length){
     ws[grandCell] = {t:'n', f:`SUM(${L(lineTotalColIdx,dataStartRow)}:${L(lineTotalColIdx,lastPartRow)})+SUM(${L(extraAmountColIdx,extraStart)}:${L(extraAmountColIdx,extraStart+state.extraItems.length-1)})`};
   } else if(state.parts.length){
@@ -1513,6 +1547,12 @@ async function init(){
     storageNote.textContent = "This copy is running outside Claude's preview, so nothing saves here automatically unless you're signed in with Microsoft — then it saves to your OneDrive folder instead. Sign in (top right) to pick that back up.";
   }
   document.getElementById('qDate').value = new Date().toISOString().slice(0,10);
+  const qnField = document.getElementById('qQuoteNo');
+  if(!qnField.value){
+    const d = new Date();
+    const stamp = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+    qnField.value = 'JMC-' + stamp; // just a starting suggestion — type over it any time, e.g. for EW-#### job numbers
+  }
   state.parts.push(newPart(), newPart());
   renderMaterials();
   renderProcessRates();
