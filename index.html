@@ -17,6 +17,7 @@
     --graphite-950:#14181d;
     --graphite-900:#1b2128;
     --graphite-800:#252c35;
+    --header-bg:#1b2128;
     --steel-line:#3d4750;
     --paper:#f3f1ea;
     --paper-panel:#ffffff;
@@ -98,7 +99,7 @@
 
   table.rt{width:100%; border-collapse:collapse; font-size:12.5px;}
   table.rt th{
-    background:var(--graphite-900); color:#e7e9ec; font-family:var(--mono); font-weight:600; font-size:11px;
+    background:var(--header-bg); color:#e7e9ec; font-family:var(--mono); font-weight:600; font-size:11px;
     text-transform:uppercase; letter-spacing:.03em; padding:8px 8px; text-align:left;
   }
   table.rt td{padding:6px 7px; border-bottom:1px solid #e5e2d8; vertical-align:middle;}
@@ -112,14 +113,14 @@
   .quote-meta{display:grid; grid-template-columns:repeat(4,1fr); gap:12px;}
 
   .parts-scroll{overflow-x:auto; border:1px solid var(--steel-line); border-radius:6px; position:relative;}
-  table.parts{width:100%; border-collapse:collapse; font-size:12px; min-width:1700px;}
+  table.parts{width:100%; border-collapse:collapse; font-size:12px; min-width:2050px;}
   table.parts thead th{
-    background:var(--graphite-900); color:#e7e9ec; font-family:var(--mono); font-weight:600; font-size:10.5px;
-    text-transform:uppercase; padding:8px 6px; text-align:center; white-space:nowrap; border-right:1px solid #3d4750;
+    background:var(--header-bg); color:#e7e9ec; font-family:var(--mono); font-weight:600; font-size:10.5px;
+    text-transform:uppercase; padding:8px 6px; text-align:center; white-space:nowrap; border-right:1px solid rgba(255,255,255,.1);
   }
-  table.parts thead th.grp-mat{background:#3a3122;}
-  table.parts thead th.grp-proc{background:#22303a;}
-  table.parts thead th.grp-out{background:#2c2222;}
+  table.parts thead th.grp-mat{background:var(--header-bg); box-shadow:inset 0 0 0 999px rgba(185,140,60,.18);}
+  table.parts thead th.grp-proc{background:var(--header-bg); box-shadow:inset 0 0 0 999px rgba(60,140,185,.18);}
+  table.parts thead th.grp-out{background:var(--header-bg); box-shadow:inset 0 0 0 999px rgba(185,60,60,.16);}
   table.parts tbody td{padding:5px 5px; border-bottom:1px solid #e5e2d8; border-right:1px solid #eee9dc; white-space:nowrap;}
   table.parts tbody tr:nth-child(even){background:#faf8f2;}
   table.parts input, table.parts select{width:100%; min-width:58px; padding:5px 6px; font-size:12px;}
@@ -142,7 +143,7 @@
   table.parts tbody td:nth-child(-n+6){background:var(--paper-panel); z-index:2;}
   table.parts tbody tr:nth-child(even) td:nth-child(-n+6){background:#faf8f2;}
   table.parts thead th.freeze-sno, table.parts thead th.freeze-partno, table.parts thead th.freeze-photo, table.parts thead th.freeze-desc,
-  table.parts thead th.freeze-shape, table.parts thead th.freeze-material{z-index:3; background:var(--graphite-900);}
+  table.parts thead th.freeze-shape, table.parts thead th.freeze-material{z-index:3; background:var(--header-bg);}
 
   .proc-input.auto-mode{background:#fbf6ec;}
   .auto-tag{font-family:var(--mono);font-size:8.5px;color:var(--brass-dark);display:block;text-align:center;}
@@ -240,6 +241,10 @@
         <div style="width:160px;">
           <label>Brand accent color</label>
           <input type="color" id="brandColorInput" value="#003393">
+        </div>
+        <div style="width:160px;">
+          <label>Table / header color</label>
+          <input type="color" id="headerColorInput" value="#1b2128">
         </div>
       </div>
       <div class="branding-row" style="margin-top:18px; padding-top:18px; border-top:1px solid #eee9dc;">
@@ -362,18 +367,15 @@
               <th rowspan="2">Qty</th>
               <th class="grp-out" rowspan="2">Weight (kg)</th>
               <th class="grp-out" rowspan="2">RM Cost</th>
-              <th class="grp-proc" colspan="9">Process Costs</th>
+              <th class="grp-proc" id="procGroupHeader" colspan="12">Process Costs</th>
               <th class="grp-out" rowspan="2">Sum</th>
               <th class="grp-out" rowspan="2">Margin</th>
               <th class="grp-out" rowspan="2">Sub Total /pc</th>
               <th class="grp-out" rowspan="2">Line Total</th>
               <th rowspan="2"></th>
             </tr>
-            <tr>
+            <tr id="procSubHeaderRow">
               <th class="grp-mat">Dia</th><th class="grp-mat">T</th><th class="grp-mat">W</th><th class="grp-mat">L</th>
-              <th class="grp-proc">Mill/Turn</th><th class="grp-proc">Grind</th><th class="grp-proc">Jig B/G</th>
-              <th class="grp-proc">CMM</th><th class="grp-proc">VMC</th><th class="grp-proc">HT</th>
-              <th class="grp-proc">Fin. Grind</th><th class="grp-proc">Wire Cut</th><th class="grp-proc">Bench</th>
             </tr>
           </thead>
           <tbody id="partsBody"></tbody>
@@ -453,6 +455,9 @@
         <p><b>Added</b> — Quote No. auto-fills with a date-based suggestion (JMC-YYYYMMDD) on load — still fully editable, so your EW-#### job numbers work exactly as before.</p>
         <p><b>Fixed</b> — S.No and Part No were the same number before (both showing "101, 102..."). Split into two columns: S.No is now a true running count (1, 2, 3...), and Part No is its own editable field defaulting to the old 101-style numbering.</p>
         <p><b>Fixed</b> — Pasted photos were being stretched to exactly fill the table cell, distorting non-square images. Now sized to fit within the cell without distortion (like CSS object-fit: contain), centered in whatever space is left over.</p>
+        <p><b>Added</b> — Separate "Table / header color" control (Company Branding). The table headers previously used a fixed dark grey that no picker touched — that's now yours to set, applied to the on-screen tables and the PDF table header alike.</p>
+        <p><b>Added</b> — Three more process columns: Treatment, Profile Mill, and Other. The process sub-headers now build themselves from the column list, so adding more later won't break the layout.</p>
+        <p><b>Changed</b> — Quote No. now auto-fills as JMC-QT-101 and counts up (102, 103...), staying ahead of whatever's already saved in your OneDrive folder. Still fully editable.</p>
       </div>
     </div>
     <div class="card">
@@ -480,9 +485,12 @@ const PROC_COLS = [
   {key:'cmm', label:'CMM'},
   {key:'vmc', label:'VMC'},
   {key:'ht', label:'HT'},
+  {key:'treatment', label:'Treatment'},
+  {key:'profileMill', label:'Profile Mill'},
   {key:'finGrind', label:'Fin. Grind'},
   {key:'wireCut', label:'Wire Cut'},
   {key:'bench', label:'Bench'},
+  {key:'other', label:'Other'},
 ];
 
 function defaultProcessRates(){
@@ -505,10 +513,13 @@ const state = {
   companyLogo: DEFAULT_JMC_LOGO,
   eSignature: null,
   brandColor: '#003393',
-  pdfColumns: {photo:true, rmCost:true, millTurn:true, grind:true, jig:true, cmm:true, vmc:true, ht:true, finGrind:true, wireCut:true, bench:true, sum:true, margin:true, subTotal:true, lineTotal:true},
+  headerColor: '#1b2128',
+  pdfColumns: Object.assign({photo:true, rmCost:true, sum:true, margin:true, subTotal:true, lineTotal:true},
+    ...PROC_COLS.map(c=>({[c.key]:true}))),
   pdfAutoHide: true,
   marginDisplayMode: 'both',
   oneDriveFolder: 'JMC Quotations',
+  lastQuoteSeq: 100,
   parts: [],
   extraItems: [
     {description:'Design Costing', amount:3000},
@@ -525,7 +536,7 @@ function newPart(){
 }
 
 /* ================= PERSISTENCE ================= */
-const STORAGE_KEY = 'jmc-quote-engine-settings-v3';
+const STORAGE_KEY = 'jmc-quote-engine-settings-v4';
 const storageAvailable = (typeof window.storage !== 'undefined' && window.storage !== null);
 
 let oneDriveSyncTimer = null;
@@ -537,8 +548,8 @@ async function saveSettings(){
   const payload = {
     materials: state.materials, processRates: state.processRates, stockAllowance: state.stockAllowance,
     defaultMargin: state.defaultMargin, currency: state.currency, companyLogo: state.companyLogo, eSignature: state.eSignature,
-    brandColor: state.brandColor, pdfColumns: state.pdfColumns, pdfAutoHide: state.pdfAutoHide, marginDisplayMode: state.marginDisplayMode,
-    oneDriveFolder: state.oneDriveFolder
+    brandColor: state.brandColor, headerColor: state.headerColor, pdfColumns: state.pdfColumns, pdfAutoHide: state.pdfAutoHide, marginDisplayMode: state.marginDisplayMode,
+    oneDriveFolder: state.oneDriveFolder, lastQuoteSeq: state.lastQuoteSeq
   };
   if(storageAvailable){
     try{ await window.storage.set(STORAGE_KEY, JSON.stringify(payload), false); }
@@ -556,17 +567,19 @@ async function loadSettings(){
       const saved = JSON.parse(res.value);
       Object.assign(state, {
         materials: saved.materials || state.materials,
-        processRates: saved.processRates || state.processRates,
+        processRates: Object.assign({}, defaultProcessRates(), saved.processRates || {}),
         stockAllowance: saved.stockAllowance ?? state.stockAllowance,
         defaultMargin: saved.defaultMargin ?? state.defaultMargin,
         currency: saved.currency || state.currency,
         companyLogo: saved.companyLogo || null,
         eSignature: saved.eSignature || null,
         brandColor: saved.brandColor || state.brandColor,
-        pdfColumns: saved.pdfColumns || state.pdfColumns,
+        headerColor: saved.headerColor || state.headerColor,
+        pdfColumns: Object.assign({}, state.pdfColumns, saved.pdfColumns || {}),
         pdfAutoHide: (saved.pdfAutoHide !== undefined) ? saved.pdfAutoHide : state.pdfAutoHide,
         marginDisplayMode: saved.marginDisplayMode || state.marginDisplayMode,
-        oneDriveFolder: saved.oneDriveFolder || state.oneDriveFolder
+        oneDriveFolder: saved.oneDriveFolder || state.oneDriveFolder,
+        lastQuoteSeq: saved.lastQuoteSeq ?? state.lastQuoteSeq
       });
     }
   }catch(err){ /* no saved settings yet — use defaults */ }
@@ -588,6 +601,16 @@ function shade(hex, percent){
 }
 function imgFormatFromDataUrl(url){ return (url && url.startsWith('data:image/png')) ? 'PNG' : 'JPEG'; }
 function roundUpTo10(v){ return Math.ceil(v/10)*10; }
+const QUOTE_PREFIX = 'JMC-QT-';
+function nextQuoteNumber(){
+  const n = (state.lastQuoteSeq && state.lastQuoteSeq >= 101) ? state.lastQuoteSeq + 1 : 101;
+  return QUOTE_PREFIX + n;
+}
+// Given a filename/quote-no like "JMC-QT-137", pull out 137. Returns null if it doesn't match.
+function parseQuoteSeq(name){
+  const m = String(name).match(/JMC-QT-(\d+)/i);
+  return m ? parseInt(m[1],10) : null;
+}
 function formatMargin(margin, marginPct){
   if(state.marginDisplayMode==='amount') return fmt(margin);
   if(state.marginDisplayMode==='percent') return marginPct+'%';
@@ -597,6 +620,7 @@ function applyBrandColor(){
   document.documentElement.style.setProperty('--brass', state.brandColor);
   document.documentElement.style.setProperty('--brass-dark', shade(state.brandColor, -0.28));
   document.documentElement.style.setProperty('--brass-light', shade(state.brandColor, 0.35));
+  document.documentElement.style.setProperty('--header-bg', state.headerColor);
 }
 
 /* ================= CALC ================= */
@@ -786,6 +810,7 @@ function renderBranding(){
     sigPreview.classList.add('empty'); sigPreview.innerHTML = 'No signature uploaded<br>(blank space left in PDF)';
   }
   document.getElementById('brandColorInput').value = state.brandColor;
+  document.getElementById('headerColorInput').value = state.headerColor;
   applyBrandColor();
 }
 document.getElementById('logoUpload').addEventListener('change', async (e)=>{
@@ -810,6 +835,9 @@ document.getElementById('clearSignatureBtn').addEventListener('click', ()=>{
 });
 document.getElementById('brandColorInput').addEventListener('input', e=>{
   state.brandColor = e.target.value; applyBrandColor(); saveSettings();
+});
+document.getElementById('headerColorInput').addEventListener('input', e=>{
+  state.headerColor = e.target.value; applyBrandColor(); saveSettings();
 });
 
 // Copy-paste support for the logo and signature boxes (click to focus, then Ctrl+V)
@@ -967,6 +995,19 @@ function renderSinglePartRow(part){
   updateRowComputed(tr, part);
 }
 
+function renderProcessHeaders(){
+  document.getElementById('procGroupHeader').colSpan = PROC_COLS.length;
+  const row = document.getElementById('procSubHeaderRow');
+  // keep the four dimension sub-headers (Dia/T/W/L), replace everything after
+  while(row.children.length > 4){ row.removeChild(row.lastChild); }
+  PROC_COLS.forEach(pc=>{
+    const th = document.createElement('th');
+    th.className = 'grp-proc';
+    th.textContent = pc.label;
+    row.appendChild(th);
+  });
+}
+
 function renderParts(){
   const tbody = document.getElementById('partsBody');
   tbody.innerHTML = '';
@@ -1073,6 +1114,7 @@ document.getElementById('exportPdfBtn').addEventListener('click', async ()=>{
   const pageHeight = doc.internal.pageSize.getHeight();
   const usableWidth = pageWidth - margin*2;
   const [br,bg,bb] = hexToRgb(state.brandColor);
+  const [hr,hg,hb] = hexToRgb(state.headerColor);
   // jsPDF's built-in fonts (helvetica/times/courier) have no glyph for ₹ — falls back to a
   // garbled character. Use "Rs." for any INR-style symbol in the PDF; pass other symbols through.
   const pdfCurrencyLabel = (state.currency === '₹' || state.currency === 'Rs' || state.currency === 'Rs.') ? 'Rs. ' : (state.currency + ' ');
@@ -1157,7 +1199,7 @@ document.getElementById('exportPdfBtn').addEventListener('click', async ()=>{
     tableWidth: usableWidth,
     theme: 'grid',
     styles:{fontSize:9, cellPadding:4, font:'helvetica', minCellHeight: showPhoto?42:0, lineWidth:0.4, lineColor:[224,218,204]},
-    headStyles:{fillColor:[27,33,40], textColor:[240,240,240], fontStyle:'bold', lineColor:[27,33,40]},
+    headStyles:{fillColor:[hr,hg,hb], textColor:[240,240,240], fontStyle:'bold', lineColor:[hr,hg,hb]},
     alternateRowStyles:{fillColor:[248,246,240]},
     columnStyles: showPhoto ? {1:{cellWidth:50}, 2:{cellWidth:46}, 3:{cellWidth:120}} : {1:{cellWidth:50}, 2:{cellWidth:150}},
     didDrawCell: (data)=>{
@@ -1406,27 +1448,29 @@ function settingsPayload(){
   return {
     materials: state.materials, processRates: state.processRates, stockAllowance: state.stockAllowance,
     defaultMargin: state.defaultMargin, currency: state.currency, companyLogo: state.companyLogo, eSignature: state.eSignature,
-    brandColor: state.brandColor, pdfColumns: state.pdfColumns, pdfAutoHide: state.pdfAutoHide, marginDisplayMode: state.marginDisplayMode
+    brandColor: state.brandColor, headerColor: state.headerColor, pdfColumns: state.pdfColumns, pdfAutoHide: state.pdfAutoHide, marginDisplayMode: state.marginDisplayMode, lastQuoteSeq: state.lastQuoteSeq
   };
 }
 function applySettingsPayload(saved){
   Object.assign(state, {
     materials: saved.materials || state.materials,
-    processRates: saved.processRates || state.processRates,
+    processRates: Object.assign({}, defaultProcessRates(), saved.processRates || {}),
     stockAllowance: saved.stockAllowance ?? state.stockAllowance,
     defaultMargin: saved.defaultMargin ?? state.defaultMargin,
     currency: saved.currency || state.currency,
     companyLogo: (saved.companyLogo !== undefined) ? saved.companyLogo : state.companyLogo,
     eSignature: (saved.eSignature !== undefined) ? saved.eSignature : state.eSignature,
     brandColor: saved.brandColor || state.brandColor,
-    pdfColumns: saved.pdfColumns || state.pdfColumns,
+    headerColor: saved.headerColor || state.headerColor,
+    pdfColumns: Object.assign({}, state.pdfColumns, saved.pdfColumns || {}),
     pdfAutoHide: (saved.pdfAutoHide !== undefined) ? saved.pdfAutoHide : state.pdfAutoHide,
-    marginDisplayMode: saved.marginDisplayMode || state.marginDisplayMode
+    marginDisplayMode: saved.marginDisplayMode || state.marginDisplayMode,
+    lastQuoteSeq: saved.lastQuoteSeq ?? state.lastQuoteSeq
   });
-  renderMaterials(); renderProcessRates(); renderPdfColumnToggles();
+  renderMaterials(); renderProcessRates(); renderProcessHeaders(); renderPdfColumnToggles();
   document.getElementById('pdfAutoHide').checked = state.pdfAutoHide;
   document.getElementById('marginDisplayMode').value = state.marginDisplayMode;
-  renderBranding(); renderPartsMaterialOptions(); recalcReadouts();
+  renderBranding(); renderPartsMaterialOptions(); renderParts(); recalcReadouts();
 }
 
 async function saveSettingsToOneDrive(){
@@ -1496,6 +1540,8 @@ document.getElementById('saveQuoteBtn').addEventListener('click', async ()=>{
     const token = await getGraphToken(true);
     await ensureOneDriveFolder(token);
     await uploadJsonToOneDrive(token, qn + '.json', collectQuoteData());
+    const seq = parseQuoteSeq(qn);
+    if(seq && seq > state.lastQuoteSeq){ state.lastQuoteSeq = seq; saveSettings(); }
     alert('Saved "'+qn+'" to your OneDrive "'+oneDriveFolderName()+'" folder.');
     refreshSavedQuotesList();
   }catch(err){
@@ -1510,6 +1556,17 @@ async function refreshSavedQuotesList(){
     const token = await getGraphToken(false);
     const items = await listOneDriveQuotes(token);
     if(!items.length){ box.innerHTML = '<p class="note">No saved quotes yet in "'+oneDriveFolderName()+'". Save one from the Quote Builder tab.</p>'; return; }
+    // Keep the auto-number ahead of whatever's already saved in the folder.
+    let maxSeq = state.lastQuoteSeq;
+    items.forEach(it=>{ const s = parseQuoteSeq(it.name); if(s && s > maxSeq) maxSeq = s; });
+    if(maxSeq > state.lastQuoteSeq){
+      state.lastQuoteSeq = maxSeq; saveSettings();
+      const qnField = document.getElementById('qQuoteNo');
+      // Only refresh the suggestion if the user hasn't started their own quote yet.
+      if(qnField.value.startsWith(QUOTE_PREFIX) && !state.parts.some(p=>p.description||p.t||p.dia)){
+        qnField.value = nextQuoteNumber();
+      }
+    }
     box.innerHTML = '';
     items.forEach(item=>{
       const row = document.createElement('div');
@@ -1549,13 +1606,12 @@ async function init(){
   document.getElementById('qDate').value = new Date().toISOString().slice(0,10);
   const qnField = document.getElementById('qQuoteNo');
   if(!qnField.value){
-    const d = new Date();
-    const stamp = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
-    qnField.value = 'JMC-' + stamp; // just a starting suggestion — type over it any time, e.g. for EW-#### job numbers
+    qnField.value = nextQuoteNumber(); // JMC-QT-101, ...-102, etc. Fully editable.
   }
   state.parts.push(newPart(), newPart());
   renderMaterials();
   renderProcessRates();
+  renderProcessHeaders();
   renderPdfColumnToggles();
   document.getElementById('pdfAutoHide').checked = state.pdfAutoHide;
   document.getElementById('marginDisplayMode').value = state.marginDisplayMode;
