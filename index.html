@@ -112,12 +112,16 @@
 
   .quote-meta{display:grid; grid-template-columns:repeat(4,1fr); gap:12px;}
 
-  .parts-scroll{overflow-x:auto; border:1px solid var(--steel-line); border-radius:6px; position:relative;}
-  table.parts{width:100%; border-collapse:collapse; font-size:12px; min-width:2050px;}
+  .parts-scroll{overflow:auto; max-height:70vh; border:1px solid var(--steel-line); border-radius:6px; position:relative;}
+  table.parts{width:100%; border-collapse:separate; border-spacing:0; font-size:12px; min-width:2050px;}
   table.parts thead th{
     background:var(--header-bg); color:#e7e9ec; font-family:var(--mono); font-weight:600; font-size:10.5px;
     text-transform:uppercase; padding:8px 6px; text-align:center; white-space:nowrap; border-right:1px solid rgba(255,255,255,.1);
+    border-bottom:1px solid rgba(255,255,255,.12);
+    position:sticky; top:0; z-index:4;
   }
+  /* Second header row (Dia/T/W/L + process labels) sits below row 1, so it sticks lower down. */
+  table.parts thead tr:nth-child(2) th{ top:33px; }
   table.parts thead th.grp-mat{background:var(--header-bg); box-shadow:inset 0 0 0 999px rgba(185,140,60,.18);}
   table.parts thead th.grp-proc{background:var(--header-bg); box-shadow:inset 0 0 0 999px rgba(60,140,185,.18);}
   table.parts thead th.grp-out{background:var(--header-bg); box-shadow:inset 0 0 0 999px rgba(185,60,60,.16);}
@@ -129,7 +133,7 @@
   table.parts .readout.hi{font-weight:700; color:var(--brass-dark);}
   table.parts .badge-shape{font-family:var(--mono);font-size:10px;padding:2px 5px;border-radius:3px;background:#eee;}
 
-  /* frozen columns: S.No, Photo, Description, Shape, Material.
+  /* frozen columns: S.No, Part No, Photo, Description, Shape, Material.
      thead row 2 (Dia/T/W/L...) has its OWN nth-child count starting at 1 because the rowspan
      cells from row 1 don't repeat there — so freezing by nth-child mismatches row1 vs row2.
      Explicit classes on the row-1 header cells avoid that; tbody rows have no rowspan so
@@ -142,8 +146,9 @@
   table.parts th.freeze-material, table.parts td:nth-child(6){position:sticky; left:362px; width:90px; min-width:90px; border-right:2px solid var(--brass);}
   table.parts tbody td:nth-child(-n+6){background:var(--paper-panel); z-index:2;}
   table.parts tbody tr:nth-child(even) td:nth-child(-n+6){background:#faf8f2;}
+  /* Header corner cells = frozen column AND sticky header → must out-rank both (z-index 5). */
   table.parts thead th.freeze-sno, table.parts thead th.freeze-partno, table.parts thead th.freeze-photo, table.parts thead th.freeze-desc,
-  table.parts thead th.freeze-shape, table.parts thead th.freeze-material{z-index:3; background:var(--header-bg);}
+  table.parts thead th.freeze-shape, table.parts thead th.freeze-material{z-index:5; background:var(--header-bg);}
 
   .proc-input.auto-mode{background:#fbf6ec;}
   .auto-tag{font-family:var(--mono);font-size:8.5px;color:var(--brass-dark);display:block;text-align:center;}
@@ -194,12 +199,69 @@
   .logo-preview:focus{outline:none;border-color:var(--brass);box-shadow:0 0 0 3px rgba(185,121,63,.18);}
   .logo-preview img{max-width:100%;max-height:100%;object-fit:contain;}
   .logo-preview.empty{font-family:var(--mono);font-size:10px;color:var(--ink-soft);text-align:center;padding:6px;}
-  .saved-quote-row{display:flex; justify-content:space-between; align-items:center; padding:10px 4px; border-bottom:1px solid #eee9dc;}
+  .saved-quote-row{display:flex; justify-content:space-between; align-items:center; padding:10px 4px; border-bottom:1px solid #eee9dc; gap:12px;}
   .saved-quote-row:last-child{border-bottom:none;}
+  .saved-quote-row .sq-meta{flex:1; min-width:0;}
+  .saved-quote-row .sq-actions{display:flex; gap:6px; align-items:center;}
+
+  /* ---- Login gate ---- */
+  #loginGate{
+    position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(160deg,#0f2038 0%, #16294a 45%, #1b3057 100%);
+  }
+  #loginGate.hidden{display:none;}
+  .login-card{
+    width:440px; max-width:90vw; padding:44px 40px; border-radius:20px; text-align:center;
+    background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.14);
+    backdrop-filter:blur(6px); box-shadow:0 24px 60px rgba(0,0,0,.35);
+  }
+  .login-badge{
+    width:96px;height:96px;border-radius:22px;margin:0 auto 22px;
+    background:rgba(255,255,255,.10); border:1px solid rgba(255,255,255,.16);
+    display:flex;align-items:center;justify-content:center; overflow:hidden;
+    font-family:var(--mono);font-weight:700;font-size:30px;color:#fff;letter-spacing:-1px;
+  }
+  .login-badge img{width:100%;height:100%;object-fit:contain;}
+  .login-title{color:#fff;font-size:26px;font-weight:700;margin:0 0 4px;}
+  .login-sub{color:rgba(255,255,255,.6);font-size:14px;margin:0 0 30px;letter-spacing:.02em;}
+  .login-btn{
+    width:100%; padding:15px; border-radius:12px; border:1px solid rgba(255,255,255,.18);
+    background:rgba(255,255,255,.10); color:#fff; font-size:15px; font-weight:600; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:10px; transition:.15s;
+  }
+  .login-btn:hover{background:rgba(255,255,255,.18);}
+  .login-btn:disabled{opacity:.6; cursor:default;}
+  .login-foot{color:rgba(255,255,255,.42);font-size:12px;margin-top:26px;}
+  .login-error{color:#ffb4a2;font-size:12.5px;margin-top:16px;min-height:16px;}
+  .ms-logo{width:18px;height:18px;display:inline-block;}
+
+  /* ---- Status tag ---- */
+  .status-select{font-family:var(--mono);font-size:11px;padding:4px 8px;border-radius:20px;border:1px solid var(--steel-line);background:#fff;cursor:pointer;}
+  .status-pill{font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:20px;white-space:nowrap;}
+  .status-Open{background:#e6eef7;color:#264b7a;}
+  .status-Sent{background:#fff3d6;color:#8a5a00;}
+  .status-Won{background:#dcf0df;color:#276b30;}
+  .status-Lost{background:#f7dcdc;color:#8a2b2b;}
+  .status-On-Hold{background:#ece6f7;color:#5a3f8a;}
 </style>
 </head>
 <body>
-<div class="app">
+
+<div id="loginGate">
+  <div class="login-card">
+    <div class="login-badge" id="loginBadge">JMC</div>
+    <div class="login-title">JMC Engineering</div>
+    <div class="login-sub">Quotation &amp; Costing Portal</div>
+    <button class="login-btn" id="loginBtn">
+      <svg class="ms-logo" viewBox="0 0 21 21"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
+      <span id="loginBtnText">Continue with Microsoft</span>
+    </button>
+    <div class="login-error" id="loginError"></div>
+    <div class="login-foot">Authorized users only · info@jmcengg.com</div>
+  </div>
+</div>
+
+<div class="app" id="appRoot" style="display:none;">
 
   <header class="topbar">
     <div class="brand">
@@ -212,7 +274,7 @@
     <div class="auth-area">
       <span id="storagePill" class="pill">Checking storage…</span>
       <span id="authPill" class="pill">Not signed in</span>
-      <button class="btn btn-ghost btn-sm" id="signInBtn">Sign in with Microsoft</button>
+      <button class="btn btn-ghost btn-sm" id="signOutBtn">Sign out</button>
     </div>
   </header>
 
@@ -348,6 +410,15 @@
         <div><label>Date</label><input type="date" id="qDate"></div>
         <div><label>Quote margin % (row default)</label><input type="number" id="qMargin" value="15"></div>
         <div><label>Validity (days)</label><input type="number" id="qValidity" value="15"></div>
+        <div><label>Status</label>
+          <select id="qStatus" class="status-select" style="width:100%;">
+            <option value="Open">Open</option>
+            <option value="Sent">Sent</option>
+            <option value="Won">Won</option>
+            <option value="Lost">Lost</option>
+            <option value="On-Hold">On-Hold</option>
+          </select>
+        </div>
       </div>
     </div>
 
@@ -401,6 +472,7 @@
         <div><span class="label">Parts</span><br><span id="partsSubtotal">₹0</span></div>
         <div><span class="label">Extras</span><br><span id="extraSubtotal">₹0</span></div>
         <div><span class="label">Line items</span><br><span id="partCount">0</span></div>
+        <div><span class="label">Recovery</span><br><span id="autosaveDot" style="font-size:11px;">—</span></div>
       </div>
       <div class="toolbar" style="margin:0;">
         <button class="btn btn-outline" id="saveQuoteBtn" style="background:#fff;">Save to OneDrive</button>
@@ -416,8 +488,9 @@
       <h2>Saved Quotes <span class="sub">Stored in your OneDrive folder — set the folder name in Rate Master → OneDrive Storage</span></h2>
       <div class="toolbar">
         <button class="btn btn-outline btn-sm" id="refreshSavedBtn">Refresh list</button>
+        <input type="text" id="savedSearch" placeholder="Search by quote no. or customer…" style="flex:1; min-width:200px; max-width:360px;">
       </div>
-      <div id="savedQuotesList"><p class="note">Sign in with Microsoft, then click Refresh to see quotes you've saved here.</p></div>
+      <div id="savedQuotesList"><p class="note">Sign in, then click Refresh to see quotes you've saved here.</p></div>
     </div>
   </div>
 
@@ -458,14 +531,23 @@
         <p><b>Added</b> — Separate "Table / header color" control (Company Branding). The table headers previously used a fixed dark grey that no picker touched — that's now yours to set, applied to the on-screen tables and the PDF table header alike.</p>
         <p><b>Added</b> — Three more process columns: Treatment, Profile Mill, and Other. The process sub-headers now build themselves from the column list, so adding more later won't break the layout.</p>
         <p><b>Changed</b> — Quote No. now auto-fills as JMC-QT-101 and counts up (102, 103...), staying ahead of whatever's already saved in your OneDrive folder. Still fully editable.</p>
+        <p><b>Added</b> — Login gate: nothing loads until you sign in with Microsoft, restricted to @jmcengg.com plus a short extra-emails list you can edit at the top of the code.</p>
+        <p><b>Added</b> — Crash-recovery autosave: the quote you're editing saves to a separate recovery file every few seconds; if the browser closes unexpectedly, you're offered to restore it next time. It never overwrites your named quotes.</p>
+        <p><b>Added</b> — Saved Quotes now has search, per-quote Delete, and an Open/Sent/Won/Lost/On-Hold status tag.</p>
+        <p><b>Fixed</b> — The load bug: saved quotes reloaded with broken line items (images/dropdowns/calcs dead until you added a row) because loaded parts reused IDs that then collided with new rows. Every loaded part now gets a fresh unique ID.</p>
+        <p><b>Fixed</b> — PDF signature no longer overlaps the "For JMC ENGINEERING" line; it stacks cleanly and jumps to a fresh page if the quote ended too low.</p>
+        <p><b>Fixed</b> — Table header now stays frozen when you scroll down through 100+ rows, alongside the frozen left columns.</p>
+        <p><b>Changed</b> — Part No no longer auto-fills; type the real part code. S.No stays the running 1, 2, 3 count.</p>
       </div>
     </div>
     <div class="card">
       <h2>Still to build</h2>
       <div class="fixlist">
-        <p>— Quote status tracking (Draft / Sent / Won / Lost) and a proper reporting view (win rate, average margin, pipeline value) across saved quotes — right now Saved Quotes is a flat list, not a dashboard.</p>
-        <p>— Excel image embedding: SheetJS (free tier, used here) can't embed real images inside .xlsx cells — the Excel export flags which rows have a photo, the image itself is only in the PDF. Real embedded thumbnails in Excel need ExcelJS instead — say so if you want that swap.</p>
-        <p>— Multi-user awareness: with "just me" access this doesn't matter, but if other estimators start using this later, two people editing the same quote file at once will just overwrite each other — no conflict warning yet.</p>
+        <p>— Reporting view (win rate, average margin, pipeline value) across saved quotes — the status tags are now captured per quote, but Saved Quotes is still a flat list, not a dashboard.</p>
+        <p>— Saved-list search covers quote number reliably; customer-name search and the status pill in the list only appear when that data is readily available, since reading every file's full contents to build the list would be slow. A lightweight index file would fix this cleanly.</p>
+        <p>— Excel image embedding: SheetJS (free tier, used here) can't embed real images inside .xlsx cells — the Excel export flags which rows have a photo, the image itself is only in the PDF. Real embedded thumbnails need ExcelJS instead.</p>
+        <p>— Multi-user awareness: with "just me" access this doesn't matter, but if other estimators start using this later, two people editing the same quote file at once will overwrite each other — no conflict warning yet.</p>
+        <p>— Claude API integration (your future plan): the natural fit is a "draft this quote from a part drawing / description" helper. We'll design it when you're ready.</p>
       </div>
     </div>
   </div>
@@ -520,6 +602,7 @@ const state = {
   marginDisplayMode: 'both',
   oneDriveFolder: 'JMC Quotations',
   lastQuoteSeq: 100,
+  quoteStatus: 'Open',
   parts: [],
   extraItems: [
     {description:'Design Costing', amount:3000},
@@ -530,7 +613,7 @@ const state = {
 let partSeq = 1;
 function newPart(){
   const seq = partSeq++;
-  const p = { id: seq, partNo: 100+seq, description:'', shape:'block', materialId: state.materials[0]?.id||'', dia:'', t:'', w:'', l:'', qty:1, unitPriceStd:'', marginOverride:'', image:null };
+  const p = { id: seq, partNo: '', description:'', shape:'block', materialId: state.materials[0]?.id||'', dia:'', t:'', w:'', l:'', qty:1, unitPriceStd:'', marginOverride:'', image:null };
   PROC_COLS.forEach(c=>p[c.key]='');
   return p;
 }
@@ -1070,6 +1153,7 @@ function updateTotals(){
   document.getElementById('partsSubtotal').textContent = fmt(partsTotal);
   document.getElementById('extraSubtotal').textContent = fmt(extraTotal);
   document.getElementById('partCount').textContent = state.parts.length;
+  if(typeof scheduleAutosave === 'function') scheduleAutosave();
 }
 
 /* ================= TABS ================= */
@@ -1087,6 +1171,11 @@ document.getElementById('defaultMargin').addEventListener('input', e=>{ state.de
 document.getElementById('qMargin').addEventListener('input', recalcReadouts);
 document.getElementById('currencySymbol').addEventListener('input', e=>{ state.currency = e.target.value || '₹'; recalcReadouts(); saveSettings(); });
 document.getElementById('marginDisplayMode').addEventListener('change', e=>{ state.marginDisplayMode = e.target.value; recalcReadouts(); saveSettings(); });
+document.getElementById('qStatus').addEventListener('change', e=>{ state.quoteStatus = e.target.value; scheduleAutosave(); });
+// Any quote-header field edit should also nudge the crash-recovery autosave.
+['qQuoteNo','qPartNo','qPartName','qOperation','qCustomer','qDate','qValidity'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', ()=>{ if(typeof scheduleAutosave==='function') scheduleAutosave(); });
+});
 
 /* ================= LIGHTBOX ================= */
 function openLightbox(src){
@@ -1240,24 +1329,34 @@ document.getElementById('exportPdfBtn').addEventListener('click', async ()=>{
   doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(br,bg,bb);
   doc.text(`GRAND TOTAL:  ${pdfCurrency(grand)}`, margin, finalY);
 
-  // signature block, using the freed-up right-hand space — drawn once, wherever the content
-  // ends up landing on the LAST page (doc's "current page" naturally follows the table/summary
-  // content above, even if the parts table itself paginated across several pages).
-  const sigY = Math.min(finalY, pageHeight-110);
+  // ---- Signature block (right side) ----
+  // Total vertical space the block needs: header line + gap + signature image + gap + label.
+  const sigImgH = state.eSignature ? 42 : 0;
+  const sigImgW = 120;
+  const blockHeight = 14 /*header*/ + (state.eSignature ? (8 + sigImgH) : 24) + 8 /*gap*/ + 12 /*label*/;
+  // If the content ended too near the bottom, start a fresh page so nothing overlaps or clips.
+  let sigTop = finalY - 8;
+  if(sigTop + blockHeight > pageHeight - 40){
+    doc.addPage();
+    sigTop = 60;
+  }
+  let cursor = sigTop;
   doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(60,60,60);
-  doc.text('For JMC ENGINEERING', pageWidth-margin, sigY, {align:'right'});
-  let sigLabelY = sigY + 34;
+  doc.text('For JMC ENGINEERING', pageWidth-margin, cursor, {align:'right'});
+  cursor += 12; // gap below the header line
   if(state.eSignature){
-    const sigW = 110, sigH = 40;
-    try{ doc.addImage(state.eSignature, 'PNG', pageWidth-margin-sigW, sigY+6, sigW, sigH); sigLabelY = sigY + 6 + sigH + 12; }
+    try{ doc.addImage(state.eSignature, 'PNG', pageWidth-margin-sigImgW, cursor, sigImgW, sigImgH); }
     catch(err){ console.warn('signature embed failed', err); }
+    cursor += sigImgH + 8; // move below the image
+  } else {
+    cursor += 24; // blank space for a hand signature
   }
   doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
-  doc.text('Authorized Signatory', pageWidth-margin, sigLabelY, {align:'right'});
+  doc.setDrawColor(120,120,120); doc.setLineWidth(0.5);
+  doc.line(pageWidth-margin-sigImgW, cursor-2, pageWidth-margin, cursor-2); // signature underline
+  doc.text('Authorized Signatory', pageWidth-margin, cursor+10, {align:'right'});
 
-  finalY = Math.max(finalY, sigLabelY) + 4;
-
-  finalY += 26;
+  finalY = Math.max(finalY, cursor+10) + 22;
   doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(100,100,100);
   doc.text('Prices in INR, Ex-Works Padi, Chennai. Taxes as applicable. Subject to JMC Engineering standard terms.', margin, finalY);
 
@@ -1344,7 +1443,24 @@ document.getElementById('exportXlsxBtn').addEventListener('click', ()=>{
   XLSX.writeFile(wb, `${document.getElementById('qQuoteNo').value || 'JMC-Quote'}.xlsx`);
 });
 
-/* ================= MSAL ================= */
+/* ================= MSAL / LOGIN GATE ================= */
+// ---- Authorized users ----------------------------------------------------
+// Anyone with an @jmcengg.com address is allowed. To allow specific outside
+// people too, add their full email addresses (lowercase) to this list.
+const ALLOWED_DOMAINS = ['jmcengg.com'];
+const EXTRA_ALLOWED_EMAILS = [
+  'info@jmcengg.com',
+  // 'someone@gmail.com',   <-- add extra authorized emails here
+];
+function isAuthorizedEmail(email){
+  if(!email) return false;
+  email = email.toLowerCase().trim();
+  if(EXTRA_ALLOWED_EMAILS.map(e=>e.toLowerCase()).includes(email)) return true;
+  const domain = email.split('@')[1] || '';
+  return ALLOWED_DOMAINS.includes(domain);
+}
+// --------------------------------------------------------------------------
+
 const msalConfig = {
   auth: {
     clientId: '248daf88-bf2b-4f29-9295-ab2e707fa3ef',
@@ -1355,23 +1471,57 @@ const msalConfig = {
 let msalInstance;
 try { msalInstance = new msal.PublicClientApplication(msalConfig); } catch(e){ console.warn('MSAL not loaded', e); }
 
-async function onSignedIn(username){
+function showGate(){ document.getElementById('loginGate').classList.remove('hidden'); document.getElementById('appRoot').style.display = 'none'; }
+function showApp(){ document.getElementById('loginGate').classList.add('hidden'); document.getElementById('appRoot').style.display = ''; }
+function setLoginError(msg){ document.getElementById('loginError').textContent = msg || ''; }
+
+async function completeSignIn(username){
+  showApp();
   const pill = document.getElementById('authPill');
-  pill.textContent = 'Signed in: ' + username;
+  pill.textContent = username;
   pill.classList.add('signed');
   document.getElementById('oneDriveStatusNote').textContent = 'Signed in — quotes save to your OneDrive "'+oneDriveFolderName()+'" folder, and these settings sync there too.';
+  // Boot the app now that we're past the gate.
+  if(!appBooted){ await bootApp(); }
   await loadSettingsFromOneDrive();
   refreshSavedQuotesList();
+  await offerAutosaveRestore();
 }
 
-document.getElementById('signInBtn').addEventListener('click', async ()=>{
-  if(!msalInstance){ alert('MSAL library did not load.'); return; }
+document.getElementById('loginBtn').addEventListener('click', async ()=>{
+  const btn = document.getElementById('loginBtn');
+  const txt = document.getElementById('loginBtnText');
+  if(!msalInstance){ setLoginError('Sign-in library did not load — check your connection and refresh.'); return; }
+  setLoginError('');
+  btn.disabled = true; txt.textContent = 'Signing in…';
   try{
-    const res = await msalInstance.loginPopup({ scopes:['User.Read','Files.ReadWrite'] });
-    await onSignedIn(res.account.username);
+    const res = await msalInstance.loginPopup({ scopes:['User.Read','Files.ReadWrite'], prompt:'select_account' });
+    const email = res.account.username;
+    if(!isAuthorizedEmail(email)){
+      setLoginError('“'+email+'” is not an authorized user. Contact info@jmcengg.com for access.');
+      await msalInstance.logoutPopup({ account: res.account }).catch(()=>{});
+      btn.disabled = false; txt.textContent = 'Continue with Microsoft';
+      return;
+    }
+    await completeSignIn(email);
   }catch(err){
     console.warn(err);
-    alert('Sign-in did not complete. This preview runs on a sandboxed origin that is not registered as a redirect URI for the JMC Azure app — this will work once deployed to your GitHub Pages / Azure Static Web App URL (same as the Order Tracker). See the "What Changed & Why" tab.');
+    setLoginError('Sign-in did not complete. If this is a fresh deployment, make sure this page URL is registered as a redirect URI on the Azure app.');
+    btn.disabled = false; txt.textContent = 'Continue with Microsoft';
+  }
+});
+
+document.getElementById('signOutBtn').addEventListener('click', async ()=>{
+  try{
+    const accounts = msalInstance ? msalInstance.getAllAccounts() : [];
+    if(accounts.length){ await msalInstance.logoutPopup({ account: accounts[0] }).catch(()=>{}); }
+  }finally{
+    const pill = document.getElementById('authPill');
+    pill.textContent = 'Not signed in'; pill.classList.remove('signed');
+    document.getElementById('loginBtn').disabled = false;
+    document.getElementById('loginBtnText').textContent = 'Continue with Microsoft';
+    setLoginError('');
+    showGate();
   }
 });
 
@@ -1384,9 +1534,9 @@ document.getElementById('oneDriveFolderInput').addEventListener('input', e=>{
 });
 
 async function getGraphToken(interactive){
-  if(!msalInstance) throw new Error('MSAL library did not load.');
+  if(!msalInstance) throw new Error('Sign-in library did not load.');
   const accounts = msalInstance.getAllAccounts();
-  if(!accounts.length){ const err = new Error('Sign in with Microsoft first.'); err.code = 'NOT_SIGNED_IN'; throw err; }
+  if(!accounts.length){ const err = new Error('Sign in first.'); err.code = 'NOT_SIGNED_IN'; throw err; }
   const req = {scopes:['Files.ReadWrite'], account: accounts[0]};
   try{
     const res = await msalInstance.acquireTokenSilent(req);
@@ -1442,6 +1592,14 @@ async function downloadOneDriveItem(item){
   const res = await fetch(url);
   if(!res.ok) throw new Error('Download failed (status '+res.status+').');
   return res.json();
+}
+
+async function deleteOneDriveItem(token, fileName){
+  const folder = oneDriveFolderName();
+  const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(folder)}/${encodeURIComponent(fileName)}`;
+  const res = await fetch(url, { method:'DELETE', headers:{Authorization:`Bearer ${token}`} });
+  if(!res.ok && res.status !== 404) throw new Error('Delete failed (status '+res.status+').');
+  return true;
 }
 
 function settingsPayload(){
@@ -1512,10 +1670,15 @@ function collectQuoteData(){
     date: document.getElementById('qDate').value,
     margin: document.getElementById('qMargin').value,
     validity: document.getElementById('qValidity').value,
+    status: state.quoteStatus || 'Open',
     parts: state.parts,
     extraItems: state.extraItems,
     savedAt: new Date().toISOString()
   };
+}
+function renderQuoteStatus(){
+  const sel = document.getElementById('qStatus');
+  if(sel) sel.value = state.quoteStatus || 'Open';
 }
 function applyQuoteData(q){
   document.getElementById('qQuoteNo').value = q.quoteNo || '';
@@ -1526,8 +1689,21 @@ function applyQuoteData(q){
   document.getElementById('qDate').value = q.date || '';
   document.getElementById('qMargin').value = q.margin || state.defaultMargin;
   document.getElementById('qValidity').value = q.validity || 15;
-  state.parts = q.parts || [];
+  const loadedParts = (q.parts || []).map(p=>{
+    // Re-key every loaded part with a fresh unique id and advance the global counter past it.
+    // Without this, a loaded part's id could collide with a later newPart() id, and the
+    // querySelector(`tr[data-id="X"]`) lookups in the render/wire path would then target the
+    // wrong row — the root cause of images/dropdowns/calcs not loading until a new row was added.
+    const fresh = Object.assign({}, p, { id: partSeq++ });
+    // Backfill fields that may be missing from quotes saved by an older version.
+    if(fresh.partNo === undefined) fresh.partNo = '';
+    PROC_COLS.forEach(c=>{ if(fresh[c.key] === undefined) fresh[c.key] = ''; });
+    return fresh;
+  });
+  state.parts = loadedParts;
   state.extraItems = q.extraItems || [];
+  state.quoteStatus = q.status || 'Open';
+  renderQuoteStatus();
   renderParts(); renderExtras();
 }
 
@@ -1549,66 +1725,160 @@ document.getElementById('saveQuoteBtn').addEventListener('click', async ()=>{
   }finally{ btn.textContent = orig; btn.disabled = false; }
 });
 
+let savedQuotesCache = [];
+const AUTOSAVE_FILE = '_autosave_working.json';
+
+// ---- Autosave (crash recovery) ------------------------------------------
+// The quote you're actively editing is written to a single recovery file on a
+// short debounce. It's separate from your named quotes so it never overwrites
+// a real saved quote. On open, if it's newer than expected, we offer to restore.
+let autosaveTimer = null;
+let autosaveInFlight = false;
+function scheduleAutosave(){
+  if(!msalInstance || !msalInstance.getAllAccounts().length) return; // only when signed in
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(runAutosave, 4000);
+}
+async function runAutosave(){
+  if(autosaveInFlight) return;
+  // Don't autosave a completely empty quote.
+  const hasContent = state.parts.some(p=>p.description||p.t||p.dia||p.image) ||
+                     document.getElementById('qCustomer').value || document.getElementById('qPartName').value;
+  if(!hasContent) return;
+  autosaveInFlight = true;
+  try{
+    const token = await getGraphToken(false);
+    await ensureOneDriveFolder(token);
+    const payload = collectQuoteData();
+    payload._autosave = true;
+    await uploadJsonToOneDrive(token, AUTOSAVE_FILE, payload);
+    const dot = document.getElementById('autosaveDot');
+    if(dot){ dot.textContent = 'Recovery saved ' + new Date().toLocaleTimeString('en-IN'); }
+  }catch(err){ /* transient — will retry on next edit */ }
+  finally{ autosaveInFlight = false; }
+}
+
+async function offerAutosaveRestore(){
+  try{
+    const token = await getGraphToken(false);
+    const folder = oneDriveFolderName();
+    const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(folder)}/${AUTOSAVE_FILE}:/content`;
+    const res = await fetch(url, {headers:{Authorization:`Bearer ${token}`}});
+    if(!res.ok) return; // no recovery file
+    const data = await res.json();
+    if(!data || !data.savedAt) return;
+    const when = new Date(data.savedAt).toLocaleString('en-IN');
+    const label = data.quoteNo ? `"${data.quoteNo}"` : 'an unsaved quote';
+    if(confirm(`Unsaved work from ${when} was found (${label}). Restore it?\n\nOK = restore it · Cancel = start fresh`)){
+      applyQuoteData(data);
+    }
+  }catch(err){ /* no recovery file or unreadable — ignore */ }
+}
+
 async function refreshSavedQuotesList(){
   const box = document.getElementById('savedQuotesList');
   box.innerHTML = '<p class="note">Loading…</p>';
   try{
     const token = await getGraphToken(false);
     const items = await listOneDriveQuotes(token);
-    if(!items.length){ box.innerHTML = '<p class="note">No saved quotes yet in "'+oneDriveFolderName()+'". Save one from the Quote Builder tab.</p>'; return; }
+    // Hide the machine files (settings + autosave recovery) from the user-facing list.
+    savedQuotesCache = items.filter(it=> it.name !== '_settings.json' && it.name !== AUTOSAVE_FILE);
     // Keep the auto-number ahead of whatever's already saved in the folder.
     let maxSeq = state.lastQuoteSeq;
-    items.forEach(it=>{ const s = parseQuoteSeq(it.name); if(s && s > maxSeq) maxSeq = s; });
+    savedQuotesCache.forEach(it=>{ const s = parseQuoteSeq(it.name); if(s && s > maxSeq) maxSeq = s; });
     if(maxSeq > state.lastQuoteSeq){
       state.lastQuoteSeq = maxSeq; saveSettings();
       const qnField = document.getElementById('qQuoteNo');
-      // Only refresh the suggestion if the user hasn't started their own quote yet.
       if(qnField.value.startsWith(QUOTE_PREFIX) && !state.parts.some(p=>p.description||p.t||p.dia)){
         qnField.value = nextQuoteNumber();
       }
     }
-    box.innerHTML = '';
-    items.forEach(item=>{
-      const row = document.createElement('div');
-      row.className = 'saved-quote-row';
-      const modified = new Date(item.lastModifiedDateTime).toLocaleString('en-IN');
-      row.innerHTML = `<div><b>${item.name.replace(/\.json$/,'')}</b><br><span class="note" style="margin:0;">Saved ${modified}</span></div><button class="btn btn-outline btn-sm">Load</button>`;
-      row.querySelector('button').addEventListener('click', async ()=>{
-        try{
-          const data = await downloadOneDriveItem(item);
-          applyQuoteData(data);
-          document.querySelector('.tab[data-tab="quote"]').click();
-        }catch(err){ alert('Could not load this quote: '+err.message); }
-      });
-      box.appendChild(row);
-    });
+    renderSavedQuotesList();
   }catch(err){
+    savedQuotesCache = [];
     box.innerHTML = err.code==='NOT_SIGNED_IN'
-      ? '<p class="note">Sign in with Microsoft (top right) to see quotes saved here.</p>'
+      ? '<p class="note">Sign in to see quotes saved here.</p>'
       : '<p class="note">Could not load saved quotes: '+err.message+'</p>';
   }
 }
+
+function renderSavedQuotesList(){
+  const box = document.getElementById('savedQuotesList');
+  const q = (document.getElementById('savedSearch').value || '').toLowerCase().trim();
+  let items = savedQuotesCache.slice();
+  if(q){
+    items = items.filter(it=>{
+      const name = it.name.replace(/\.json$/,'').toLowerCase();
+      const cust = (it._customer||'').toLowerCase();
+      return name.includes(q) || cust.includes(q);
+    });
+  }
+  if(!items.length){
+    box.innerHTML = q ? '<p class="note">No saved quotes match “'+q+'”.</p>'
+                      : '<p class="note">No saved quotes yet in "'+oneDriveFolderName()+'". Save one from the Quote Builder tab.</p>';
+    return;
+  }
+  box.innerHTML = '';
+  items.forEach(item=>{
+    const row = document.createElement('div');
+    row.className = 'saved-quote-row';
+    const modified = new Date(item.lastModifiedDateTime).toLocaleString('en-IN');
+    const name = item.name.replace(/\.json$/,'');
+    const statusHtml = item._status ? `<span class="status-pill status-${item._status.replace(/\s/g,'-')}">${item._status}</span>` : '';
+    const custHtml = item._customer ? ` · ${item._customer}` : '';
+    row.innerHTML = `
+      <div class="sq-meta">
+        <b>${name}</b> ${statusHtml}<br>
+        <span class="note" style="margin:0;">Saved ${modified}${custHtml}</span>
+      </div>
+      <div class="sq-actions">
+        <button class="btn btn-outline btn-sm sq-load">Load</button>
+        <button class="del-btn sq-del" title="Delete">×</button>
+      </div>`;
+    row.querySelector('.sq-load').addEventListener('click', async ()=>{
+      try{
+        const data = await downloadOneDriveItem(item);
+        applyQuoteData(data);
+        document.querySelector('.tab[data-tab="quote"]').click();
+      }catch(err){ alert('Could not load this quote: '+err.message); }
+    });
+    row.querySelector('.sq-del').addEventListener('click', async ()=>{
+      if(!confirm('Delete "'+name+'" from OneDrive? This cannot be undone.')) return;
+      try{
+        const token = await getGraphToken(true);
+        await deleteOneDriveItem(token, item.name);
+        savedQuotesCache = savedQuotesCache.filter(x=>x.name!==item.name);
+        renderSavedQuotesList();
+      }catch(err){ alert('Could not delete: '+err.message); }
+    });
+    box.appendChild(row);
+  });
+}
 document.getElementById('refreshSavedBtn').addEventListener('click', refreshSavedQuotesList);
+document.getElementById('savedSearch').addEventListener('input', renderSavedQuotesList);
 
 /* ================= INIT ================= */
-async function init(){
+let appBooted = false;
+
+// Renders the actual app UI. Runs once, only after the login gate is passed.
+async function bootApp(){
+  if(appBooted) return;
+  appBooted = true;
+
   const storagePill = document.getElementById('storagePill');
   const storageNote = document.getElementById('storageNote');
   if(storageAvailable){
     await loadSettings();
     storagePill.textContent = 'Settings auto-save: on (Claude)';
-    storageNote.textContent = 'Inside this Claude chat, logo/rates/PDF choices save automatically here too — but sign in with Microsoft (top right) so they (and your quotes) also save to OneDrive, which is what carries over once this is deployed.';
+    storageNote.textContent = 'Inside this Claude chat, logo/rates/PDF choices save automatically here too. Once deployed and signed in, they (and your quotes) save to OneDrive instead.';
   } else {
-    storagePill.textContent = 'Settings auto-save: off (standalone file)';
-    storagePill.classList.add('storage-off');
-    storageNote.textContent = "This copy is running outside Claude's preview, so nothing saves here automatically unless you're signed in with Microsoft — then it saves to your OneDrive folder instead. Sign in (top right) to pick that back up.";
+    storagePill.textContent = 'Settings auto-save: OneDrive';
+    storageNote.textContent = "You're signed in, so settings and quotes save to your OneDrive folder. A crash-recovery copy of the quote you're editing is also kept automatically.";
   }
   document.getElementById('qDate').value = new Date().toISOString().slice(0,10);
   const qnField = document.getElementById('qQuoteNo');
-  if(!qnField.value){
-    qnField.value = nextQuoteNumber(); // JMC-QT-101, ...-102, etc. Fully editable.
-  }
-  state.parts.push(newPart(), newPart());
+  if(!qnField.value){ qnField.value = nextQuoteNumber(); }
+  if(!state.parts.length){ state.parts.push(newPart(), newPart()); }
   renderMaterials();
   renderProcessRates();
   renderProcessHeaders();
@@ -1617,15 +1887,42 @@ async function init(){
   document.getElementById('marginDisplayMode').value = state.marginDisplayMode;
   document.getElementById('oneDriveFolderInput').value = state.oneDriveFolder;
   renderBranding();
+  renderQuoteStatus();
   renderExtras();
   renderParts();
 
-  // If the browser still has a cached Microsoft session (e.g. a page refresh, not a fresh visit),
-  // pick it back up without making the person click "Sign in" again.
+  // Mirror the uploaded logo into the login badge so the gate looks branded too.
+  const lb = document.getElementById('loginBadge');
+  if(state.companyLogo && lb){ lb.innerHTML = `<img src="${state.companyLogo}">`; }
+}
+
+// Decides gate vs. app on load. If a valid Microsoft session is already cached
+// AND the account is still authorized, skip the gate; otherwise show it.
+async function init(){
+  showGate();
   if(msalInstance){
-    const accounts = msalInstance.getAllAccounts();
-    if(accounts.length){ await onSignedIn(accounts[0].username); }
+    try{
+      const accounts = msalInstance.getAllAccounts();
+      if(accounts.length && isAuthorizedEmail(accounts[0].username)){
+        await completeSignIn(accounts[0].username);
+        return;
+      }
+    }catch(err){ console.warn('session resume failed', err); }
   }
+  // Claude preview only: real Microsoft login can't complete on this sandboxed origin,
+  // so offer a preview bypass to exercise the tool. This does NOT run on your deployed
+  // site (window.storage only exists inside Claude), so the gate stays hard once hosted.
+  if(storageAvailable){
+    const err = document.getElementById('loginError');
+    err.innerHTML = 'Preview mode: Microsoft login can’t complete inside Claude. <button id="previewBypass" style="background:none;border:none;color:#9ecbff;text-decoration:underline;cursor:pointer;font-size:12.5px;padding:0;">Open the tool without signing in</button>';
+    const bp = document.getElementById('previewBypass');
+    if(bp) bp.addEventListener('click', async ()=>{
+      showApp();
+      document.getElementById('authPill').textContent = 'Preview (not signed in)';
+      if(!appBooted){ await bootApp(); }
+    });
+  }
+  // Not signed in (or not authorized): stay on the gate. bootApp() runs after a successful sign-in.
 }
 init();
 </script>
