@@ -475,6 +475,7 @@
         <div><span class="label">Recovery</span><br><span id="autosaveDot" style="font-size:11px;">—</span></div>
       </div>
       <div class="toolbar" style="margin:0;">
+        <button class="btn btn-outline" id="newQuoteBtn" style="background:#fff;">New Quote</button>
         <button class="btn btn-outline" id="saveQuoteBtn" style="background:#fff;">Save to OneDrive</button>
         <button class="btn btn-brass" id="exportPdfBtn">Export PDF (client copy)</button>
         <button class="btn btn-outline" id="exportXlsxBtn" style="background:#fff;">Export Excel (full working file)</button>
@@ -538,6 +539,11 @@
         <p><b>Fixed</b> — PDF signature no longer overlaps the "For JMC ENGINEERING" line; it stacks cleanly and jumps to a fresh page if the quote ended too low.</p>
         <p><b>Fixed</b> — Table header now stays frozen when you scroll down through 100+ rows, alongside the frozen left columns.</p>
         <p><b>Changed</b> — Part No no longer auto-fills; type the real part code. S.No stays the running 1, 2, 3 count.</p>
+        <p><b>Fixed (audit)</b> — A double-quote character in any text field (an inch mark like <code>BUSH 25" LONG</code>) used to corrupt the whole row, because values were dropped into HTML attributes unescaped. All interpolated values are now escaped.</p>
+        <p><b>Added (audit)</b> — A "New Quote" button. Previously the only way to clear the form was reloading the page. It warns first if you have unsaved changes, and the browser now also warns before you close the tab with unsaved work.</p>
+        <p><b>Added (audit)</b> — Saving over an existing quote number now asks first and shows when that quote was last saved, instead of silently overwriting it. Quote numbers containing characters OneDrive rejects are caught up front.</p>
+        <p><b>Fixed (audit)</b> — Auto-save used to swallow every error, so an expired session meant your work quietly stopped being backed up. It now shows its status live (Saved / Saving / FAILING) and warns you outright after repeated failures.</p>
+        <p><b>Fixed (audit)</b> — Auto-save no longer re-uploads the entire quote (including every pasted photo) every few seconds. It skips upload entirely when nothing changed, runs on a longer interval, and refuses very large payloads rather than failing silently.</p>
       </div>
     </div>
     <div class="card">
@@ -683,6 +689,14 @@ function shade(hex, percent){
   return "#"+(0x1000000+(Math.round((t-R)*p)+R)*0x10000+(Math.round((t-G)*p)+G)*0x100+(Math.round((t-B)*p)+B)).toString(16).slice(1);
 }
 function imgFormatFromDataUrl(url){ return (url && url.startsWith('data:image/png')) ? 'PNG' : 'JPEG'; }
+// Escape a value before dropping it into an HTML attribute. Without this, an inch mark
+// in a description ("BUSH 25\" LONG") closes the attribute early and corrupts the row.
+function esc(v){
+  if(v === null || v === undefined) return '';
+  return String(v)
+    .replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')
+    .replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 function roundUpTo10(v){ return Math.ceil(v/10)*10; }
 const QUOTE_PREFIX = 'JMC-QT-';
 function nextQuoteNumber(){
@@ -751,11 +765,11 @@ function renderMaterials(){
   state.materials.forEach((m,i)=>{
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><input data-idx="${i}" data-f="name" value="${m.name}"></td>
+      <td><input data-idx="${i}" data-f="name" value="${esc(m.name)}"></td>
       <td><input data-idx="${i}" data-f="rate" type="number" class="num" value="${m.rate}"></td>
       <td><input data-idx="${i}" data-f="density" type="number" step="0.01" class="num" value="${m.density}"></td>
       <td><input data-idx="${i}" data-f="htRate" type="number" class="num" value="${m.htRate||0}"></td>
-      <td><input data-idx="${i}" data-f="notes" value="${m.notes||''}"></td>
+      <td><input data-idx="${i}" data-f="notes" value="${esc(m.notes||'')}"></td>
       <td style="text-align:center;"><button class="del-btn" data-idx="${i}" title="Remove">×</button></td>`;
     tbody.appendChild(tr);
   });
@@ -944,7 +958,7 @@ wireBrandingPasteBox('signaturePreview', (dataUrl)=>{ state.eSignature = dataUrl
 
 /* ================= PARTS TABLE ================= */
 function materialOptions(selectedId){
-  return state.materials.map(m=>`<option value="${m.id}" ${m.id===selectedId?'selected':''}>${m.name}</option>`).join('');
+  return state.materials.map(m=>`<option value="${esc(m.id)}" ${m.id===selectedId?'selected':''}>${esc(m.name)}</option>`).join('');
 }
 function renderPartsMaterialOptions(){
   document.querySelectorAll('select.mat-select').forEach(sel=>{
@@ -959,35 +973,35 @@ function buildPartRowHTML(part, displayIndex){
   if(part.shape==='block'){
     dimCells = `
       <td></td>
-      <td><input type="number" class="pf" data-f="t" value="${part.t}"></td>
-      <td><input type="number" class="pf" data-f="w" value="${part.w}"></td>
-      <td><input type="number" class="pf" data-f="l" value="${part.l}"></td>`;
+      <td><input type="number" class="pf" data-f="t" value="${esc(part.t)}"></td>
+      <td><input type="number" class="pf" data-f="w" value="${esc(part.w)}"></td>
+      <td><input type="number" class="pf" data-f="l" value="${esc(part.l)}"></td>`;
   } else if(part.shape==='round'){
     dimCells = `
-      <td><input type="number" class="pf" data-f="dia" value="${part.dia}"></td>
+      <td><input type="number" class="pf" data-f="dia" value="${esc(part.dia)}"></td>
       <td></td><td></td>
-      <td><input type="number" class="pf" data-f="l" placeholder="length" value="${part.l}"></td>`;
+      <td><input type="number" class="pf" data-f="l" placeholder="length" value="${esc(part.l)}"></td>`;
   } else {
-    dimCells = `<td colspan="4"><input type="number" class="pf" data-f="unitPriceStd" placeholder="Unit price ${state.currency}" value="${part.unitPriceStd}"></td>`;
+    dimCells = `<td colspan="4"><input type="number" class="pf" data-f="unitPriceStd" placeholder="Unit price ${esc(state.currency)}" value="${esc(part.unitPriceStd)}"></td>`;
   }
 
   const procCells = PROC_COLS.map(pc=>{
     const pr = state.processRates[pc.key];
     if(pr.mode==='auto'){
-      return `<td><input type="number" class="pf proc-input auto-mode" data-f="${pc.key}" data-role="proc-${pc.key}" value="${part[pc.key]}" placeholder="0"><span class="auto-tag">auto</span></td>`;
+      return `<td><input type="number" class="pf proc-input auto-mode" data-f="${pc.key}" data-role="proc-${pc.key}" value="${esc(part[pc.key])}" placeholder="0"><span class="auto-tag">auto</span></td>`;
     }
-    return `<td><input type="number" class="pf" data-f="${pc.key}" value="${part[pc.key]}"></td>`;
+    return `<td><input type="number" class="pf" data-f="${pc.key}" value="${esc(part[pc.key])}"></td>`;
   }).join('');
 
   return `
     <td class="readout">${displayIndex+1}</td>
-    <td><input type="text" class="pf" data-f="partNo" value="${part.partNo!=null?part.partNo:''}" placeholder="e.g. 101"></td>
+    <td><input type="text" class="pf" data-f="partNo" value="${esc(part.partNo)}" placeholder="e.g. 101"></td>
     <td class="photo-cell">
       <div class="photo-box ${part.image?'has-img':''}" tabindex="0" title="Click, then paste (Ctrl+V) an image">
         ${part.image ? `<img src="${part.image}"><button class="clear-photo" title="Remove photo">×</button>` : 'Click +<br>paste image'}
       </div>
     </td>
-    <td class="desc-cell"><input class="pf" data-f="description" value="${part.description}" placeholder="Part description"></td>
+    <td class="desc-cell"><input class="pf" data-f="description" value="${esc(part.description)}" placeholder="Part description"></td>
     <td>
       <select class="pf shape-select" data-f="shape">
         <option value="block" ${part.shape==='block'?'selected':''}>Block</option>
@@ -997,7 +1011,7 @@ function buildPartRowHTML(part, displayIndex){
     </td>
     <td>${part.shape==='standard' ? '<span class="badge-shape">bought-out</span>' : `<select class="pf mat-select" data-id="${part.id}" data-f="materialId">${materialOptions(part.materialId)}</select>`}</td>
     ${dimCells}
-    <td><input type="number" class="pf" data-f="qty" value="${part.qty}" min="1"></td>
+    <td><input type="number" class="pf" data-f="qty" value="${esc(part.qty)}" min="1"></td>
     <td class="readout" data-role="weight">0.000</td>
     <td class="readout" data-role="rmCost">${fmt(0)}</td>
     ${procCells}
@@ -1124,8 +1138,8 @@ function renderExtras(){
     const row = document.createElement('div');
     row.className = 'extra-row';
     row.innerHTML = `
-      <input value="${item.description}" data-i="${i}" data-f="description" placeholder="Line item description">
-      <input type="number" value="${item.amount}" data-i="${i}" data-f="amount" class="num">
+      <input value="${esc(item.description)}" data-i="${i}" data-f="description" placeholder="Line item description">
+      <input type="number" value="${esc(item.amount)}" data-i="${i}" data-f="amount" class="num">
       <button class="del-btn">×</button>`;
     box.appendChild(row);
     row.querySelectorAll('input').forEach(inp=>{
@@ -1594,8 +1608,17 @@ async function downloadOneDriveItem(item){
   return res.json();
 }
 
-async function deleteOneDriveItem(token, fileName){
+// Returns file metadata if it exists in the folder, or null. Used to warn before overwriting.
+async function oneDriveFileInfo(token, fileName){
   const folder = oneDriveFolderName();
+  const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(folder)}/${encodeURIComponent(fileName)}`;
+  const res = await fetch(url, {headers:{Authorization:`Bearer ${token}`}});
+  if(res.status === 404) return null;
+  if(!res.ok) return null; // can't confirm — don't block the save
+  return res.json();
+}
+
+async function deleteOneDriveItem(token, fileName){  const folder = oneDriveFolderName();
   const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(folder)}/${encodeURIComponent(fileName)}`;
   const res = await fetch(url, { method:'DELETE', headers:{Authorization:`Bearer ${token}`} });
   if(!res.ok && res.status !== 404) throw new Error('Delete failed (status '+res.status+').');
@@ -1680,6 +1703,55 @@ function renderQuoteStatus(){
   const sel = document.getElementById('qStatus');
   if(sel) sel.value = state.quoteStatus || 'Open';
 }
+
+// Snapshot of the quote as last saved, used to detect unsaved changes.
+let lastSavedSnapshot = null;
+function currentSnapshot(){
+  try{ return JSON.stringify(collectQuoteData()); }catch(e){ return null; }
+}
+function markQuoteSaved(){ lastSavedSnapshot = currentSnapshot(); }
+function hasUnsavedChanges(){
+  const now = currentSnapshot();
+  if(lastSavedSnapshot === null) {
+    // Never saved: only "dirty" if the user actually put something in.
+    return state.parts.some(p=>p.description||p.t||p.dia||p.image||p.partNo) ||
+           !!document.getElementById('qCustomer').value ||
+           !!document.getElementById('qPartName').value;
+  }
+  return now !== lastSavedSnapshot;
+}
+
+function startNewQuote(){
+  if(hasUnsavedChanges()){
+    if(!confirm('This quote has unsaved changes. Start a new quote anyway?\n\nOK = discard and start new · Cancel = go back')) return;
+  }
+  partSeq = 1;
+  state.parts = [newPart(), newPart()];
+  state.extraItems = [
+    {description:'Design Costing', amount:3000},
+    {description:'Assemble & Transport', amount:5000},
+  ];
+  state.quoteStatus = 'Open';
+  document.getElementById('qQuoteNo').value = nextQuoteNumber();
+  document.getElementById('qPartNo').value = '';
+  document.getElementById('qPartName').value = '';
+  document.getElementById('qOperation').value = '';
+  document.getElementById('qCustomer').value = '';
+  document.getElementById('qDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('qMargin').value = state.defaultMargin;
+  document.getElementById('qValidity').value = 15;
+  renderQuoteStatus();
+  renderParts();
+  renderExtras();
+  lastSavedSnapshot = null;
+  document.querySelector('.tab[data-tab="quote"]').click();
+}
+document.getElementById('newQuoteBtn').addEventListener('click', startNewQuote);
+
+// Warn before closing/refreshing the tab with unsaved changes.
+window.addEventListener('beforeunload', (e)=>{
+  if(hasUnsavedChanges()){ e.preventDefault(); e.returnValue = ''; }
+});
 function applyQuoteData(q){
   document.getElementById('qQuoteNo').value = q.quoteNo || '';
   document.getElementById('qPartNo').value = q.partNo || '';
@@ -1705,19 +1777,31 @@ function applyQuoteData(q){
   state.quoteStatus = q.status || 'Open';
   renderQuoteStatus();
   renderParts(); renderExtras();
+  // A just-loaded quote matches what's in OneDrive — treat it as clean.
+  if(!q._autosave){ markQuoteSaved(); } else { lastSavedSnapshot = null; }
 }
 
 document.getElementById('saveQuoteBtn').addEventListener('click', async ()=>{
   const btn = document.getElementById('saveQuoteBtn');
   const qn = document.getElementById('qQuoteNo').value.trim();
   if(!qn){ alert('Enter a Quote No. before saving.'); return; }
+  if(/[\\\/:*?"<>|]/.test(qn)){ alert('Quote No. can\'t contain any of these characters:  \\ / : * ? " < > |'); return; }
   const orig = btn.textContent; btn.textContent = 'Saving…'; btn.disabled = true;
   try{
     const token = await getGraphToken(true);
     await ensureOneDriveFolder(token);
+    // Don't silently clobber a different quote that already uses this number.
+    const existing = await oneDriveFileInfo(token, qn + '.json');
+    if(existing){
+      const when = new Date(existing.lastModifiedDateTime).toLocaleString('en-IN');
+      if(!confirm('“'+qn+'” already exists in OneDrive (last saved '+when+').\n\nOverwrite it?\n\nOK = overwrite · Cancel = change the Quote No. first')){
+        btn.textContent = orig; btn.disabled = false; return;
+      }
+    }
     await uploadJsonToOneDrive(token, qn + '.json', collectQuoteData());
     const seq = parseQuoteSeq(qn);
     if(seq && seq > state.lastQuoteSeq){ state.lastQuoteSeq = seq; saveSettings(); }
+    markQuoteSaved();
     alert('Saved "'+qn+'" to your OneDrive "'+oneDriveFolderName()+'" folder.');
     refreshSavedQuotesList();
   }catch(err){
@@ -1734,28 +1818,63 @@ const AUTOSAVE_FILE = '_autosave_working.json';
 // a real saved quote. On open, if it's newer than expected, we offer to restore.
 let autosaveTimer = null;
 let autosaveInFlight = false;
+let lastAutosavePayload = null;   // skip uploads when nothing actually changed
+let autosaveFailures = 0;
+let autosaveWarned = false;
+
+function setAutosaveStatus(text, mode){
+  const dot = document.getElementById('autosaveDot');
+  if(!dot) return;
+  dot.textContent = text;
+  dot.style.color = mode==='error' ? '#ffb4a2' : (mode==='ok' ? '#bfe6c4' : '#c9d0d8');
+}
+
 function scheduleAutosave(){
   if(!msalInstance || !msalInstance.getAllAccounts().length) return; // only when signed in
   clearTimeout(autosaveTimer);
-  autosaveTimer = setTimeout(runAutosave, 4000);
+  autosaveTimer = setTimeout(runAutosave, 10000);
 }
+
 async function runAutosave(){
   if(autosaveInFlight) return;
-  // Don't autosave a completely empty quote.
   const hasContent = state.parts.some(p=>p.description||p.t||p.dia||p.image) ||
                      document.getElementById('qCustomer').value || document.getElementById('qPartName').value;
   if(!hasContent) return;
+
+  const payload = collectQuoteData();
+  payload._autosave = true;
+  const body = JSON.stringify(payload);
+  // Nothing changed since the last successful autosave — don't re-upload megabytes.
+  if(body === lastAutosavePayload){ return; }
+
+  const sizeMB = body.length / (1024*1024);
+  if(sizeMB > 30){
+    setAutosaveStatus('Too large to auto-save ('+sizeMB.toFixed(1)+' MB) — save manually', 'error');
+    return;
+  }
+
   autosaveInFlight = true;
+  setAutosaveStatus('Saving…');
   try{
     const token = await getGraphToken(false);
     await ensureOneDriveFolder(token);
-    const payload = collectQuoteData();
-    payload._autosave = true;
     await uploadJsonToOneDrive(token, AUTOSAVE_FILE, payload);
-    const dot = document.getElementById('autosaveDot');
-    if(dot){ dot.textContent = 'Recovery saved ' + new Date().toLocaleTimeString('en-IN'); }
-  }catch(err){ /* transient — will retry on next edit */ }
-  finally{ autosaveInFlight = false; }
+    lastAutosavePayload = body;
+    autosaveFailures = 0; autosaveWarned = false;
+    setAutosaveStatus('Saved ' + new Date().toLocaleTimeString('en-IN'), 'ok');
+  }catch(err){
+    autosaveFailures++;
+    console.warn('autosave failed', err);
+    setAutosaveStatus('Auto-save FAILING (' + autosaveFailures + ') — save manually', 'error');
+    // A crash-recovery feature that fails quietly is worse than none. Say so, once.
+    if(autosaveFailures >= 3 && !autosaveWarned){
+      autosaveWarned = true;
+      const signedOut = (err && err.code === 'NOT_SIGNED_IN');
+      alert(signedOut
+        ? 'Auto-save has stopped because your Microsoft session ended.\n\nSign in again (top right) and use "Save to OneDrive" so you don\'t lose this quote.'
+        : 'Auto-save to OneDrive has failed several times in a row, so your work is NOT being backed up right now.\n\nUse "Save to OneDrive" manually, or export to Excel, to be safe.');
+    }
+  }finally{ autosaveInFlight = false; }
 }
 
 async function offerAutosaveRestore(){
@@ -1825,10 +1944,10 @@ function renderSavedQuotesList(){
     const modified = new Date(item.lastModifiedDateTime).toLocaleString('en-IN');
     const name = item.name.replace(/\.json$/,'');
     const statusHtml = item._status ? `<span class="status-pill status-${item._status.replace(/\s/g,'-')}">${item._status}</span>` : '';
-    const custHtml = item._customer ? ` · ${item._customer}` : '';
+    const custHtml = item._customer ? ` · ${esc(item._customer)}` : '';
     row.innerHTML = `
       <div class="sq-meta">
-        <b>${name}</b> ${statusHtml}<br>
+        <b>${esc(name)}</b> ${statusHtml}<br>
         <span class="note" style="margin:0;">Saved ${modified}${custHtml}</span>
       </div>
       <div class="sq-actions">
