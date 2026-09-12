@@ -4,10 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>JMC Quote Engine</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-<script src="https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js"></script>
+<!-- Third-party libraries. These run with full access to the page, including Graph tokens,
+     so they should be pinned with Subresource Integrity hashes before this goes live.
+     Run  tools/add-sri.sh  from a machine with internet access to fill in the integrity
+     attributes automatically; see SECURITY.md for why this matters. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script>
   // Microsoft's US-West CDN above; if it's unreachable, fall back to their EU-North mirror.
   if (typeof msal === 'undefined') document.write(unescape("%3Cscript src='https://alcdn.msftauth.net/browser/2.35.0/js/msal-browser.min.js' type='text/javascript'%3E%3C/script%3E"));
@@ -76,7 +80,9 @@
   .tab{
     font-family:var(--mono); font-size:12.5px; letter-spacing:.03em; text-transform:uppercase;
     padding:10px 16px; cursor:pointer; color:var(--ink-soft); border-bottom:2px solid transparent; margin-bottom:-2px;
+    background:none; border-top:0; border-left:0; border-right:0; border-radius:0; appearance:none;
   }
+  .tab:focus-visible{outline:2px solid var(--brass); outline-offset:2px;}
   .tab.active{color:var(--ink); border-bottom-color:var(--brass); font-weight:700;}
   .panel{display:none;}
   .panel.active{display:block;}
@@ -238,6 +244,17 @@
   /* ---- Status tag ---- */
   .status-select{font-family:var(--mono);font-size:11px;padding:4px 8px;border-radius:20px;border:1px solid var(--steel-line);background:#fff;cursor:pointer;}
   .status-pill{font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:20px;white-space:nowrap;}
+  /* Rate-context banner: says which rates this quote is priced with. */
+  .rate-banner{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+    padding:10px 14px;border-radius:6px;margin-bottom:16px;font-size:12.5px;
+    font-family:var(--sans);border:1px solid transparent;}
+  .rate-banner.live{background:#eef4ff;border-color:#c6d8f5;color:#22334d;}
+  .rate-banner.frozen{background:#fff7e6;border-color:#f0dcae;color:#5a4413;}
+  .rate-banner .rb-text{flex:1;min-width:220px;}
+  .rate-banner b{font-weight:700;}
+  .rate-banner .btn{flex:none;}
+  /* An auto-priced process cost the estimator has typed over. */
+  input.proc-input.overridden{background:#fff7e6;border-color:#e0c98a;font-weight:600;}
   .status-Open{background:#e6eef7;color:#264b7a;}
   .status-Sent{background:#fff3d6;color:#8a5a00;}
   .status-Won{background:#dcf0df;color:#276b30;}
@@ -278,11 +295,11 @@
     </div>
   </header>
 
-  <div class="tabs">
-    <div class="tab active" data-tab="ratemaster">Rate Master</div>
-    <div class="tab" data-tab="quote">Quote Builder</div>
-    <div class="tab" data-tab="saved">Saved Quotes</div>
-    <div class="tab" data-tab="notes">What Changed &amp; Why</div>
+  <div class="tabs" role="tablist">
+    <button type="button" class="tab active" data-tab="ratemaster" role="tab" aria-selected="true" aria-controls="panel-ratemaster">Rate Master</button>
+    <button type="button" class="tab" data-tab="quote" role="tab" aria-selected="false" aria-controls="panel-quote">Quote Builder</button>
+    <button type="button" class="tab" data-tab="saved" role="tab" aria-selected="false" aria-controls="panel-saved">Saved Quotes</button>
+    <button type="button" class="tab" data-tab="notes" role="tab" aria-selected="false" aria-controls="panel-notes">How Pricing Works</button>
   </div>
 
   <!-- RATE MASTER -->
@@ -336,7 +353,7 @@
           <button class="btn btn-outline btn-sm" id="syncSettingsBtn">Sync settings now</button>
         </div>
       </div>
-      <p class="note" id="oneDriveStatusNote">Sign in with Microsoft (top right) to save quotes and sync these settings to OneDrive — otherwise this tab only saves inside Claude's own preview.</p>
+      <p class="note" id="oneDriveStatusNote">Sign in with Microsoft (top right) to save quotes and sync these settings to OneDrive. Until then, changes stay in this browser only.</p>
     </div>
 
     <div class="card">
@@ -346,6 +363,9 @@
         <tbody></tbody>
       </table>
       <button class="btn btn-outline btn-sm add-row" id="addMaterialBtn">+ Add material</button>
+      <p class="note"><b>These rates apply to new quotes.</b> A quote you saved keeps its own copy of
+      the rates it was costed with, so editing this table never retro-prices work you have already
+      quoted. To re-price an old quote at today\u2019s rates, open it and use \u201cUse current rate master\u201d.</p>
       <p class="note">HT Rate is used when Heat Treatment is set to Auto in Process Rates below — since hardening cost genuinely differs by grade, it's priced per material instead of one flat rate. Starting numbers here are placeholders — set your real per-material HT rates.</p>
     </div>
 
@@ -399,6 +419,7 @@
 
   <!-- QUOTE BUILDER -->
   <div class="panel" id="panel-quote">
+    <div id="rateBanner" class="rate-banner live"></div>
     <div class="card">
       <h2>Quote Header</h2>
       <div class="quote-meta">
@@ -489,71 +510,74 @@
       <h2>Saved Quotes <span class="sub">Stored in your OneDrive folder — set the folder name in Rate Master → OneDrive Storage</span></h2>
       <div class="toolbar">
         <button class="btn btn-outline btn-sm" id="refreshSavedBtn">Refresh list</button>
-        <input type="text" id="savedSearch" placeholder="Search by quote no. or customer…" style="flex:1; min-width:200px; max-width:360px;">
+        <button class="btn btn-outline btn-sm" id="rebuildIndexBtn" title="Read every saved quote once and rebuild the customer/status index">Rebuild index</button>
+        <input type="text" id="savedSearch" placeholder="Search by quote no., customer or part name…" style="flex:1; min-width:200px; max-width:360px;">
       </div>
       <div id="savedQuotesList"><p class="note">Sign in, then click Refresh to see quotes you've saved here.</p></div>
     </div>
   </div>
 
-  <!-- NOTES -->
+  <!-- HOW PRICING WORKS -->
   <div class="panel" id="panel-notes">
     <div class="card">
-      <h2>Fixed vs. the original workbook</h2>
+      <h2>How a price is built</h2>
       <div class="fixlist">
-        <p><b>Fixed</b> — Material cost (RM Cost) now flows into Sum → Margin → Sub Total → Grand Total.</p>
-        <p><b>Fixed</b> — One weight formula, applied consistently, configurable in Rate Master.</p>
-        <p><b>Fixed</b> — Round-stock parts get a real cylindrical volume calc instead of a zeroed rectangular formula.</p>
-        <p><b>Fixed</b> — Bought-out/standard parts get their own direct-price costing path.</p>
-        <p><b>Fixed</b> — Profit margin is one visible, editable field per quote instead of silently varying 15–20% across sheets.</p>
-        <p><b>Fixed</b> — Heat Treatment (and any process you choose) can now price itself automatically from weight × ₹/kg via Process Rates, instead of being retyped per part.</p>
-        <p><b>Fixed</b> — Typing in any part row no longer rebuilds the whole table, so the cursor stays put and horizontal scroll position no longer resets.</p>
-        <p><b>Fixed</b> — First five columns (S.No → Material) stay frozen while scrolling through the process-cost columns.</p>
-        <p><b>Fixed</b> — PDF export is landscape, with a configurable column set (Rate Master → PDF Export Columns) and your real logo once uploaded.</p>
-        <p><b>Fixed</b> — Frozen-column header no longer overlaps Description/Shape — the sticky CSS was matching the wrong header row (the Dia/T/W/L sub-header has its own column count once S.No–Material's rowspan cells are excluded).</p>
-        <p><b>Fixed</b> — PDF now has light column gridlines, stretches to use the full landscape width instead of leaving the right side blank, and adds a signature block.</p>
-        <p><b>Fixed</b> — Grand Total in the PDF was showing a garbled character instead of ₹ — jsPDF's built-in font has no ₹ glyph. It now prints "Rs." in PDF output (still ₹ on-screen, where it renders fine).</p>
-        <p><b>Fixed</b> — Margin can now display as amount, percent, or both — your choice, in Rate Master → Costing Rules, applied everywhere (app + PDF).</p>
-        <p><b>Fixed</b> — Auto-calculated process costs (like HT) round up to the next ₹10 instead of landing on odd numbers — 41 becomes 50, not 40.</p>
-        <p><b>Fixed</b> — Auto-calculated fields are still editable per part now — type over the greyed "auto" placeholder to override just that line item; leave it blank to keep the automatic value.</p>
-        <p><b>Fixed</b> — Default brand color and logo now match your actual JMC Engineering logo (navy blue) instead of a generic amber guess.</p>
-        <p><b>Fixed</b> — Logo swapped to your white-on-navy version so it blends into the dark header bar instead of sitting in a visible white box.</p>
-        <p><b>Fixed</b> — Heat Treatment auto-pricing now uses each material's own HT rate (Materials table) instead of one flat rate for every grade — hardening OHNS genuinely doesn't cost the same as hardening MS.</p>
-        <p><b>Fixed</b> — "JMC ENGINEERING" title in the PDF header is now white — it was rendering in navy brand-color text on a navy header band, nearly invisible.</p>
-        <p><b>Fixed</b> — Margin column in the PDF table had the same broken-₹-glyph bug as the old Grand Total — fixed the same way, by dropping the currency symbol there to match every other numeric column in that table.</p>
-        <p><b>Added</b> — E-signature upload (Rate Master → Company Branding). Appears once, in the signature block on the last page — it follows wherever the quote content actually ends, it doesn't repeat on every page even if the parts table itself spans several.</p>
-        <p><b>Fixed</b> — Background-removed logos turning solid black on upload. The logo box was compressing everything to JPEG, which has no transparency channel — any see-through pixel got flattened to black on export. Both the logo and signature boxes now keep PNG transparency end to end.</p>
-        <p><b>Added</b> — Copy-paste for the logo and signature boxes too, same as the per-part photo fields: click the box, then Ctrl+V.</p>
-        <p><b>Added</b> — Real persistence: sign in with Microsoft and quotes save to a OneDrive folder you name (Rate Master → OneDrive Storage), with a Saved Quotes tab to browse and reload them. Rate Master settings sync there too, so they survive on the deployed site, not just inside Claude.</p>
-        <p><b>Fixed</b> — PDF header band now uses your actual brand color instead of a fixed dark graphite fill.</p>
-        <p><b>Fixed</b> — "QUOTATION" moved to top-right of the details block, level with the first detail line — standard letterhead layout instead of stacked on the left.</p>
-        <p><b>Added</b> — Quote No. auto-fills with a date-based suggestion (JMC-YYYYMMDD) on load — still fully editable, so your EW-#### job numbers work exactly as before.</p>
-        <p><b>Fixed</b> — S.No and Part No were the same number before (both showing "101, 102..."). Split into two columns: S.No is now a true running count (1, 2, 3...), and Part No is its own editable field defaulting to the old 101-style numbering.</p>
-        <p><b>Fixed</b> — Pasted photos were being stretched to exactly fill the table cell, distorting non-square images. Now sized to fit within the cell without distortion (like CSS object-fit: contain), centered in whatever space is left over.</p>
-        <p><b>Added</b> — Separate "Table / header color" control (Company Branding). The table headers previously used a fixed dark grey that no picker touched — that's now yours to set, applied to the on-screen tables and the PDF table header alike.</p>
-        <p><b>Added</b> — Three more process columns: Treatment, Profile Mill, and Other. The process sub-headers now build themselves from the column list, so adding more later won't break the layout.</p>
-        <p><b>Changed</b> — Quote No. now auto-fills as JMC-QT-101 and counts up (102, 103...), staying ahead of whatever's already saved in your OneDrive folder. Still fully editable.</p>
-        <p><b>Added</b> — Login gate: nothing loads until you sign in with Microsoft, restricted to @jmcengg.com plus a short extra-emails list you can edit at the top of the code.</p>
-        <p><b>Added</b> — Crash-recovery autosave: the quote you're editing saves to a separate recovery file every few seconds; if the browser closes unexpectedly, you're offered to restore it next time. It never overwrites your named quotes.</p>
-        <p><b>Added</b> — Saved Quotes now has search, per-quote Delete, and an Open/Sent/Won/Lost/On-Hold status tag.</p>
-        <p><b>Fixed</b> — The load bug: saved quotes reloaded with broken line items (images/dropdowns/calcs dead until you added a row) because loaded parts reused IDs that then collided with new rows. Every loaded part now gets a fresh unique ID.</p>
-        <p><b>Fixed</b> — PDF signature no longer overlaps the "For JMC ENGINEERING" line; it stacks cleanly and jumps to a fresh page if the quote ended too low.</p>
-        <p><b>Fixed</b> — Table header now stays frozen when you scroll down through 100+ rows, alongside the frozen left columns.</p>
-        <p><b>Changed</b> — Part No no longer auto-fills; type the real part code. S.No stays the running 1, 2, 3 count.</p>
-        <p><b>Fixed (audit)</b> — A double-quote character in any text field (an inch mark like <code>BUSH 25" LONG</code>) used to corrupt the whole row, because values were dropped into HTML attributes unescaped. All interpolated values are now escaped.</p>
-        <p><b>Added (audit)</b> — A "New Quote" button. Previously the only way to clear the form was reloading the page. It warns first if you have unsaved changes, and the browser now also warns before you close the tab with unsaved work.</p>
-        <p><b>Added (audit)</b> — Saving over an existing quote number now asks first and shows when that quote was last saved, instead of silently overwriting it. Quote numbers containing characters OneDrive rejects are caught up front.</p>
-        <p><b>Fixed (audit)</b> — Auto-save used to swallow every error, so an expired session meant your work quietly stopped being backed up. It now shows its status live (Saved / Saving / FAILING) and warns you outright after repeated failures.</p>
-        <p><b>Fixed (audit)</b> — Auto-save no longer re-uploads the entire quote (including every pasted photo) every few seconds. It skips upload entirely when nothing changed, runs on a longer interval, and refuses very large payloads rather than failing silently.</p>
+        <p><b>1. Raw material weight</b> — Block: (T + allowance) &times; (W + allowance) &times; (L + allowance) &times; density &divide; 1,000,000.
+        Round: &pi; &times; ((DIA + allowance) &divide; 2)&sup2; &times; (Length + allowance) &times; density &divide; 1,000,000.
+        Std/BOP parts skip weight entirely and take a direct unit price.</p>
+        <p><b>2. RM cost</b> = weight &times; the material&rsquo;s &#8377;/kg.</p>
+        <p><b>3. Process costs</b> — typed per part, except any process set to <i>Auto</i> in Rate Master,
+        which prices itself as weight &times; &#8377;/kg rounded up to the next &#8377;10. Heat Treatment uses each
+        material&rsquo;s own HT rate, because hardening OHNS does not cost the same as hardening MS.
+        Type over an auto field to override just that row; clear it to go back to automatic.</p>
+        <p><b>4. Sum</b> = RM cost + all process costs. <b>Margin</b> = Sum &times; margin %. <b>Sub Total /pc</b> = Sum + Margin.</p>
+        <p><b>5. Line Total</b> = Sub Total &times; Qty. <b>Grand Total</b> = all line totals + extra line items.</p>
       </div>
     </div>
+
     <div class="card">
-      <h2>Still to build</h2>
+      <h2>Which rates a quote uses</h2>
       <div class="fixlist">
-        <p>— Reporting view (win rate, average margin, pipeline value) across saved quotes — the status tags are now captured per quote, but Saved Quotes is still a flat list, not a dashboard.</p>
-        <p>— Saved-list search covers quote number reliably; customer-name search and the status pill in the list only appear when that data is readily available, since reading every file's full contents to build the list would be slow. A lightweight index file would fix this cleanly.</p>
-        <p>— Excel image embedding: SheetJS (free tier, used here) can't embed real images inside .xlsx cells — the Excel export flags which rows have a photo, the image itself is only in the PDF. Real embedded thumbnails need ExcelJS instead.</p>
-        <p>— Multi-user awareness: with "just me" access this doesn't matter, but if other estimators start using this later, two people editing the same quote file at once will overwrite each other — no conflict warning yet.</p>
-        <p>— Claude API integration (your future plan): the natural fit is a "draft this quote from a part drawing / description" helper. We'll design it when you're ready.</p>
+        <p>A quote is priced against a <b>rate context</b>, not against whatever the Rate Master holds today.</p>
+        <p><b>While you build a new quote</b> it follows the Rate Master live, so editing a rate updates the
+        quote immediately. The banner at the top of Quote Builder says so.</p>
+        <p><b>When you save</b>, a copy of those rates is written into the quote file.</p>
+        <p><b>When you re-open a saved quote</b> it uses its own stored rates. Changing MS from &#8377;80 to &#8377;95
+        for a new job does <b>not</b> reach back and re-price a quote you already sent. The banner turns amber
+        and shows the date those rates were saved.</p>
+        <p><b>To re-price an old quote deliberately</b>, open it and click <b>Use current rate master</b>.
+        It asks first, and the saved file is not touched until you save again.</p>
+        <p>Quotes saved before this existed have no stored rates. They open at current rates with the banner
+        warning you that the figures may differ from what you originally quoted.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Saving, recovery and limits</h2>
+      <div class="fixlist">
+        <p><b>Saved quotes</b> live as one JSON file per quote in the OneDrive folder named in Rate Master.
+        Saving over an existing quote number asks first and shows when that quote was last saved.</p>
+        <p><b>Crash recovery</b> — the quote you are editing is copied to a separate recovery file a few
+        seconds after you stop typing. It never overwrites a named quote, and it is deleted once you save
+        properly or start a new quote. The <i>Recovery</i> readout next to the Grand Total shows its state;
+        if it says FAILING, your work is not being backed up &mdash; save manually.</p>
+        <p><b>Size limit</b> — OneDrive accepts a single file up to 4&nbsp;MB. A quote with many pasted photos
+        can reach that; if it does, you are told which action to take rather than left with a silent failure.</p>
+        <p><b>Saved Quotes list</b> shows customer, part name, status and total from a small index file kept
+        alongside your quotes. For quotes saved before the index existed, use <b>Rebuild index</b> once.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Known limits</h2>
+      <div class="fixlist">
+        <p>&mdash; Quotes are stored in the signed-in user&rsquo;s own OneDrive. Two estimators signing in with
+        different accounts do not see each other&rsquo;s quotes; this is single-user storage, not a shared library.</p>
+        <p>&mdash; The sign-in gate restricts the interface, not the data. The real boundary is OneDrive itself:
+        each account can only reach its own files.</p>
+        <p>&mdash; Excel export cannot embed real images in cells (SheetJS free tier); photo rows are flagged and
+        the images appear in the PDF.</p>
+        <p>&mdash; No reporting dashboard yet (win rate, average margin, pipeline value) across saved quotes.</p>
       </div>
     </div>
   </div>
@@ -609,6 +633,12 @@ const state = {
   oneDriveFolder: 'JMC Quotations',
   lastQuoteSeq: 100,
   quoteStatus: 'Open',
+  // --- rate context for the quote currently open (see activeRates below) ---
+  quoteMargin: 15,          // mirrors #qMargin; costing reads this, never the DOM
+  quoteRates: null,         // frozen snapshot, used when quoteRatesLinked === false
+  quoteRatesLinked: true,   // true = this quote follows the Rate Master live
+  quoteRatesSavedAt: null,  // when the frozen snapshot was taken
+  quoteRatesLegacy: false,  // loaded from a file saved before snapshots existed
   parts: [],
   extraItems: [
     {description:'Design Costing', amount:3000},
@@ -633,18 +663,48 @@ function scheduleOneDriveSettingsSync(){
   clearTimeout(oneDriveSyncTimer);
   oneDriveSyncTimer = setTimeout(()=>{ saveSettingsToOneDrive(); }, 1500);
 }
+/* One serializer, one merge. There used to be two of each \u2014 saveSettings/loadSettings for
+   local storage and settingsPayload/applySettingsPayload for OneDrive \u2014 and they had already
+   drifted: the local path did `saved.companyLogo || null`, which wiped the default logo
+   whenever a payload happened to omit it, while the OneDrive path preserved it. */
+const SETTINGS_KEYS = ['materials','processRates','stockAllowance','defaultMargin','currency',
+  'companyLogo','eSignature','brandColor','headerColor','pdfColumns','pdfAutoHide',
+  'marginDisplayMode','lastQuoteSeq'];
+
+function settingsPayload(extra){
+  const out = {};
+  SETTINGS_KEYS.forEach(k=>{ out[k] = state[k]; });
+  // The folder name is only meaningful locally: you need the folder before you can read
+  // a settings file out of it, so syncing it through that file would be circular.
+  if(extra && extra.includeFolder) out.oneDriveFolder = state.oneDriveFolder;
+  return out;
+}
+
+function mergeSettings(saved){
+  if(!saved) return;
+  Object.assign(state, {
+    materials: (Array.isArray(saved.materials) && saved.materials.length) ? saved.materials : state.materials,
+    processRates: Object.assign({}, defaultProcessRates(), saved.processRates || {}),
+    stockAllowance: saved.stockAllowance ?? state.stockAllowance,
+    defaultMargin: saved.defaultMargin ?? state.defaultMargin,
+    currency: saved.currency || state.currency,
+    companyLogo: (saved.companyLogo !== undefined) ? saved.companyLogo : state.companyLogo,
+    eSignature: (saved.eSignature !== undefined) ? saved.eSignature : state.eSignature,
+    brandColor: saved.brandColor || state.brandColor,
+    headerColor: saved.headerColor || state.headerColor,
+    pdfColumns: Object.assign({}, state.pdfColumns, saved.pdfColumns || {}),
+    pdfAutoHide: (saved.pdfAutoHide !== undefined) ? saved.pdfAutoHide : state.pdfAutoHide,
+    marginDisplayMode: saved.marginDisplayMode || state.marginDisplayMode,
+    oneDriveFolder: saved.oneDriveFolder || state.oneDriveFolder,
+    lastQuoteSeq: saved.lastQuoteSeq ?? state.lastQuoteSeq
+  });
+}
+
 async function saveSettings(){
-  const payload = {
-    materials: state.materials, processRates: state.processRates, stockAllowance: state.stockAllowance,
-    defaultMargin: state.defaultMargin, currency: state.currency, companyLogo: state.companyLogo, eSignature: state.eSignature,
-    brandColor: state.brandColor, headerColor: state.headerColor, pdfColumns: state.pdfColumns, pdfAutoHide: state.pdfAutoHide, marginDisplayMode: state.marginDisplayMode,
-    oneDriveFolder: state.oneDriveFolder, lastQuoteSeq: state.lastQuoteSeq
-  };
   if(storageAvailable){
-    try{ await window.storage.set(STORAGE_KEY, JSON.stringify(payload), false); }
+    try{ await window.storage.set(STORAGE_KEY, JSON.stringify(settingsPayload({includeFolder:true})), false); }
     catch(err){ console.warn('Settings save failed', err); }
   }
-  // Independent of Claude's own storage — this is what actually matters once deployed.
   scheduleOneDriveSettingsSync();
 }
 
@@ -652,30 +712,12 @@ async function loadSettings(){
   if(!storageAvailable) return;
   try{
     const res = await window.storage.get(STORAGE_KEY, false);
-    if(res && res.value){
-      const saved = JSON.parse(res.value);
-      Object.assign(state, {
-        materials: saved.materials || state.materials,
-        processRates: Object.assign({}, defaultProcessRates(), saved.processRates || {}),
-        stockAllowance: saved.stockAllowance ?? state.stockAllowance,
-        defaultMargin: saved.defaultMargin ?? state.defaultMargin,
-        currency: saved.currency || state.currency,
-        companyLogo: saved.companyLogo || null,
-        eSignature: saved.eSignature || null,
-        brandColor: saved.brandColor || state.brandColor,
-        headerColor: saved.headerColor || state.headerColor,
-        pdfColumns: Object.assign({}, state.pdfColumns, saved.pdfColumns || {}),
-        pdfAutoHide: (saved.pdfAutoHide !== undefined) ? saved.pdfAutoHide : state.pdfAutoHide,
-        marginDisplayMode: saved.marginDisplayMode || state.marginDisplayMode,
-        oneDriveFolder: saved.oneDriveFolder || state.oneDriveFolder,
-        lastQuoteSeq: saved.lastQuoteSeq ?? state.lastQuoteSeq
-      });
-    }
+    if(res && res.value) mergeSettings(JSON.parse(res.value));
   }catch(err){ /* no saved settings yet — use defaults */ }
 }
 
 /* ================= HELPERS ================= */
-function fmt(n){ return state.currency + (Math.round(n*100)/100).toLocaleString('en-IN',{maximumFractionDigits:2}); }
+function fmt(n){ return activeRates().currency + (Math.round(n*100)/100).toLocaleString('en-IN',{maximumFractionDigits:2}); }
 function num(v){ const n = parseFloat(v); return isNaN(n) ? 0 : n; }
 function hexToRgb(hex){
   hex = (hex||'#b9793f').replace('#','');
@@ -720,42 +762,75 @@ function applyBrandColor(){
   document.documentElement.style.setProperty('--header-bg', state.headerColor);
 }
 
+/* ================= RATE CONTEXT ================= */
+/* A quote is priced against a rate context, NOT against whatever the Rate Master
+   happens to hold today.
+
+   - A new quote follows the Rate Master live (quoteRatesLinked = true), so editing
+     a rate while you build the quote updates it, exactly as before.
+   - Saving writes a snapshot of those rates into the quote file.
+   - Opening a saved quote uses that file's own snapshot (quoteRatesLinked = false),
+     so a quote costed in March never silently re-prices itself at today's steel
+     rates just because you changed MS from 80 to 95 for a different job.
+   - "Use current rate master" re-links it, deliberately and visibly.            */
+function masterRatesView(){
+  return { materials: state.materials, processRates: state.processRates,
+           stockAllowance: state.stockAllowance, currency: state.currency };
+}
+function cloneRates(src){
+  return { materials: JSON.parse(JSON.stringify(src.materials || [])),
+           processRates: JSON.parse(JSON.stringify(src.processRates || {})),
+           stockAllowance: num(src.stockAllowance),
+           currency: src.currency || '\u20b9' };
+}
+function activeRates(){
+  return (state.quoteRatesLinked || !state.quoteRates) ? masterRatesView() : state.quoteRates;
+}
+
 /* ================= CALC ================= */
-function computePart(part){
-  const mat = state.materials.find(m=>m.id===part.materialId) || {rate:0, density:7.85};
-  const a = num(document.getElementById('stockAllowance').value || state.stockAllowance);
+function computePart(part, rates){
+  const R = rates || activeRates();
+  const mat = R.materials.find(m=>m.id===part.materialId) || {rate:0, density:7.85, htRate:0};
+  const a = Math.max(0, num(R.stockAllowance));
+  // A negative dimension is a typo, not a credit \u2014 never let one subtract from a quote.
+  const dim = v => Math.max(0, num(v));
   let weight = 0, rmCost = 0;
   if(part.shape==='block'){
-    weight = (num(part.t)+a) * (num(part.w)+a) * (num(part.l)+a) * mat.density / 1000000;
-    rmCost = weight * mat.rate;
+    weight = (dim(part.t)+a) * (dim(part.w)+a) * (dim(part.l)+a) * num(mat.density) / 1000000;
+    rmCost = weight * num(mat.rate);
   } else if(part.shape==='round'){
-    const r = (num(part.dia)+a)/2;
-    weight = Math.PI * r * r * (num(part.l)+a) * mat.density / 1000000;
-    rmCost = weight * mat.rate;
+    const r = (dim(part.dia)+a)/2;
+    weight = Math.PI * r * r * (dim(part.l)+a) * num(mat.density) / 1000000;
+    rmCost = weight * num(mat.rate);
   } else {
     weight = 0;
-    rmCost = num(part.unitPriceStd);
+    rmCost = Math.max(0, num(part.unitPriceStd));
   }
   const procVals = {};
   const procIsOverridden = {};
   PROC_COLS.forEach(c=>{
-    const pr = state.processRates[c.key];
-    if(pr && pr.mode==='auto'){
+    const pr = R.processRates[c.key] || {mode:'manual', rate:0};
+    if(pr.mode==='auto'){
       const hasOverride = part[c.key] !== '' && part[c.key] != null;
       procIsOverridden[c.key] = hasOverride;
       const effRate = (c.key==='ht') ? num(mat.htRate) : num(pr.rate);
-      procVals[c.key] = hasOverride ? num(part[c.key]) : roundUpTo10(weight * effRate);
+      procVals[c.key] = hasOverride ? Math.max(0, num(part[c.key])) : roundUpTo10(weight * effRate);
     } else {
-      procVals[c.key] = num(part[c.key]);
+      procIsOverridden[c.key] = false;
+      procVals[c.key] = Math.max(0, num(part[c.key]));
     }
   });
   const processSum = Object.values(procVals).reduce((s,v)=>s+v,0);
   const sum = rmCost + processSum;
-  const marginPct = (part.marginOverride!=='' && part.marginOverride!=null) ? num(part.marginOverride) : num(document.getElementById('qMargin').value || state.defaultMargin);
+  // Margin comes from state, not from reading #qMargin mid-calculation. Reading the DOM
+  // here was why a saved stock allowance / margin never actually took effect on reload.
+  const marginPct = (part.marginOverride!=='' && part.marginOverride!=null)
+    ? num(part.marginOverride) : num(state.quoteMargin);
   const margin = sum * (marginPct/100);
   const subTotal = sum + margin;
-  const lineTotal = subTotal * num(part.qty||1);
-  return {weight, rmCost, procVals, procIsOverridden, processSum, sum, marginPct, margin, subTotal, lineTotal};
+  const qty = (part.qty===''||part.qty==null) ? 1 : Math.max(0, num(part.qty));
+  const lineTotal = subTotal * qty;
+  return {weight, rmCost, procVals, procIsOverridden, processSum, sum, marginPct, margin, subTotal, lineTotal, qty};
 }
 
 /* ================= RATE MASTER: MATERIALS ================= */
@@ -782,13 +857,31 @@ function renderMaterials(){
   });
   tbody.querySelectorAll('.del-btn').forEach(btn=>{
     btn.addEventListener('click', e=>{
-      state.materials.splice(+e.target.dataset.idx,1);
-      renderMaterials(); renderPartsMaterialOptions(); recalcReadouts(); saveSettings();
+      const idx = +e.target.dataset.idx;
+      const victim = state.materials[idx];
+      if(!victim) return;
+      if(state.materials.length === 1){
+        alert('This is the last material. Add another grade before removing this one.');
+        return;
+      }
+      // Parts keep a materialId. Deleting the grade it points at used to leave the row
+      // displaying the first material while costing it at 0/kg \u2014 a silent price drop.
+      const orphans = state.parts.filter(p=>p.shape!=='standard' && p.materialId===victim.id);
+      if(orphans.length){
+        const rows = orphans.map(o=>state.parts.indexOf(o)+1).join(', ');
+        const fallback = state.materials[idx===0?1:0];
+        if(!confirm('\u201c'+victim.name+'\u201d is used by '+orphans.length+' part row(s): '+rows+
+          '.\n\nRemoving it will re-assign those rows to \u201c'+fallback.name+'\u201d and re-price them.\n\nOK = remove and re-assign \u00b7 Cancel = keep it')) return;
+        orphans.forEach(o=>{ o.materialId = fallback.id; });
+      }
+      state.materials.splice(idx,1);
+      renderMaterials(); renderParts(); recalcReadouts(); saveSettings();
     });
   });
 }
+let matSeq = 0;
 document.getElementById('addMaterialBtn').addEventListener('click', ()=>{
-  state.materials.push({id:'NEW'+Date.now(), name:'New Material', rate:0, density:7.85, htRate:0, notes:''});
+  state.materials.push({id:'MAT-'+Date.now()+'-'+(++matSeq), name:'New Material', rate:0, density:7.85, htRate:0, notes:''});
   renderMaterials(); renderPartsMaterialOptions(); saveSettings();
 });
 
@@ -821,7 +914,7 @@ function renderProcessRates(){
       state.processRates[key][f] = f==='rate' ? num(e.target.value) : e.target.value;
       if(f==='mode'){ renderProcessRates(); renderParts(); }
       else { recalcReadouts(); }
-      saveSettings();
+      saveSettings(); renderRateBanner();
     });
   });
 }
@@ -958,7 +1051,12 @@ wireBrandingPasteBox('signaturePreview', (dataUrl)=>{ state.eSignature = dataUrl
 
 /* ================= PARTS TABLE ================= */
 function materialOptions(selectedId){
-  return state.materials.map(m=>`<option value="${esc(m.id)}" ${m.id===selectedId?'selected':''}>${esc(m.name)}</option>`).join('');
+  const mats = activeRates().materials;
+  // If a part points at a grade that no longer exists, say so instead of silently
+  // showing the first material while costing the row at zero.
+  const missing = selectedId && !mats.some(m=>m.id===selectedId);
+  return (missing ? `<option value="${esc(selectedId)}" selected>(removed material)</option>` : '')
+    + mats.map(m=>`<option value="${esc(m.id)}" ${m.id===selectedId?'selected':''}>${esc(m.name)}</option>`).join('');
 }
 function renderPartsMaterialOptions(){
   document.querySelectorAll('select.mat-select').forEach(sel=>{
@@ -973,20 +1071,20 @@ function buildPartRowHTML(part, displayIndex){
   if(part.shape==='block'){
     dimCells = `
       <td></td>
-      <td><input type="number" class="pf" data-f="t" value="${esc(part.t)}"></td>
-      <td><input type="number" class="pf" data-f="w" value="${esc(part.w)}"></td>
-      <td><input type="number" class="pf" data-f="l" value="${esc(part.l)}"></td>`;
+      <td><input type="number" min="0" step="any" class="pf" data-f="t" value="${esc(part.t)}"></td>
+      <td><input type="number" min="0" step="any" class="pf" data-f="w" value="${esc(part.w)}"></td>
+      <td><input type="number" min="0" step="any" class="pf" data-f="l" value="${esc(part.l)}"></td>`;
   } else if(part.shape==='round'){
     dimCells = `
-      <td><input type="number" class="pf" data-f="dia" value="${esc(part.dia)}"></td>
+      <td><input type="number" min="0" step="any" class="pf" data-f="dia" value="${esc(part.dia)}"></td>
       <td></td><td></td>
-      <td><input type="number" class="pf" data-f="l" placeholder="length" value="${esc(part.l)}"></td>`;
+      <td><input type="number" min="0" step="any" class="pf" data-f="l" placeholder="length" value="${esc(part.l)}"></td>`;
   } else {
-    dimCells = `<td colspan="4"><input type="number" class="pf" data-f="unitPriceStd" placeholder="Unit price ${esc(state.currency)}" value="${esc(part.unitPriceStd)}"></td>`;
+    dimCells = `<td colspan="4"><input type="number" class="pf" data-f="unitPriceStd" min="0" step="any" placeholder="Unit price ${esc(activeRates().currency)}" value="${esc(part.unitPriceStd)}"></td>`;
   }
 
   const procCells = PROC_COLS.map(pc=>{
-    const pr = state.processRates[pc.key];
+    const pr = activeRates().processRates[pc.key] || {mode:'manual', rate:0};
     if(pr.mode==='auto'){
       return `<td><input type="number" class="pf proc-input auto-mode" data-f="${pc.key}" data-role="proc-${pc.key}" value="${esc(part[pc.key])}" placeholder="0"><span class="auto-tag">auto</span></td>`;
     }
@@ -1067,10 +1165,21 @@ function updateRowComputed(tr, part){
   const c = computePart(part);
   tr.querySelector('[data-role="weight"]').textContent = c.weight.toFixed(3);
   tr.querySelector('[data-role="rmCost"]').textContent = fmt(c.rmCost);
+  const R = activeRates();
   PROC_COLS.forEach(pc=>{
-    if(state.processRates[pc.key].mode==='auto'){
+    const pr = R.processRates[pc.key];
+    if(pr && pr.mode==='auto'){
       const el = tr.querySelector(`[data-role="proc-${pc.key}"]`);
-      if(el){ el.placeholder = c.procVals[pc.key] ? c.procVals[pc.key].toFixed(0) : '0'; }
+      if(el){
+        // Show the value auto-pricing would give, so an override is visibly a departure
+        // from it rather than replacing it invisibly.
+        const auto = roundUpTo10(c.weight * (pc.key==='ht'
+          ? num((R.materials.find(m=>m.id===part.materialId)||{}).htRate)
+          : num(pr.rate)));
+        el.placeholder = auto ? auto.toFixed(0) : '0';
+        el.classList.toggle('overridden', !!c.procIsOverridden[pc.key]);
+        el.title = c.procIsOverridden[pc.key] ? 'Manually overridden. Clear the box to go back to '+auto.toFixed(0)+'.' : 'Auto-priced from weight x rate.';
+      }
     }
   });
   tr.querySelector('[data-role="sum"]').textContent = fmt(c.sum);
@@ -1170,19 +1279,67 @@ function updateTotals(){
   if(typeof scheduleAutosave === 'function') scheduleAutosave();
 }
 
+/* ================= RATE BANNER / INPUT SYNC ================= */
+function renderRateBanner(){
+  const el = document.getElementById('rateBanner');
+  if(!el) return;
+  if(state.quoteRatesLinked && !state.quoteRatesLegacy){
+    el.className = 'rate-banner live';
+    el.innerHTML = '<div class="rb-text">Priced using the <b>current Rate Master</b>. '
+      + 'When you save, these rates are stored with the quote so it keeps this price later.</div>';
+  } else {
+    const when = state.quoteRatesSavedAt
+      ? new Date(state.quoteRatesSavedAt).toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'})
+      : null;
+    el.className = 'rate-banner frozen';
+    const lead = state.quoteRatesLegacy
+      ? 'This quote was saved before rate snapshots existed, so it has no stored rates. It is showing <b>current Rate Master</b> prices, which may differ from what you originally quoted.'
+      : 'Priced using the rates saved with this quote' + (when ? ' on <b>'+esc(when)+'</b>' : '')
+        + '. Rate Master changes since then do <b>not</b> affect it.';
+    el.innerHTML = '<div class="rb-text">'+lead+'</div>'
+      + '<button class="btn btn-outline btn-sm" id="relinkRatesBtn">Use current rate master</button>';
+    const btn = document.getElementById('relinkRatesBtn');
+    if(btn) btn.addEventListener('click', ()=>{
+      if(!confirm('Re-price this quote using today\u2019s Rate Master?\n\nLine amounts will change. The saved file is not touched until you save again.\n\nOK = re-price \u00b7 Cancel = keep saved rates')) return;
+      state.quoteRatesLinked = true;
+      state.quoteRates = null;
+      state.quoteRatesLegacy = false;
+      state.quoteRatesSavedAt = null;
+      renderParts(); renderRateBanner();
+    });
+  }
+}
+
+/* Push saved settings back into the Rate Master inputs. Without this the fields kept
+   showing their hard-coded HTML defaults after a reload, and \u2014 because costing used to read
+   those fields directly \u2014 every quote was silently costed at the default allowance/margin. */
+function syncCostingInputsFromState(){
+  document.getElementById('stockAllowance').value = state.stockAllowance;
+  document.getElementById('defaultMargin').value = state.defaultMargin;
+  document.getElementById('currencySymbol').value = state.currency;
+  document.getElementById('marginDisplayMode').value = state.marginDisplayMode;
+  document.getElementById('pdfAutoHide').checked = state.pdfAutoHide;
+  document.getElementById('oneDriveFolderInput').value = state.oneDriveFolder;
+}
+function setQuoteMargin(v){
+  state.quoteMargin = num(v);
+  const f = document.getElementById('qMargin');
+  if(f && f.value !== String(v)) f.value = v;
+}
+
 /* ================= TABS ================= */
 document.querySelectorAll('.tab').forEach(tab=>{
   tab.addEventListener('click', ()=>{
-    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t=>{ t.classList.remove('active'); t.setAttribute('aria-selected','false'); });
     document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-    tab.classList.add('active');
+    tab.classList.add('active'); tab.setAttribute('aria-selected','true');
     document.getElementById('panel-'+tab.dataset.tab).classList.add('active');
   });
 });
 
 document.getElementById('stockAllowance').addEventListener('input', e=>{ state.stockAllowance = num(e.target.value); recalcReadouts(); saveSettings(); });
 document.getElementById('defaultMargin').addEventListener('input', e=>{ state.defaultMargin = num(e.target.value); recalcReadouts(); saveSettings(); });
-document.getElementById('qMargin').addEventListener('input', recalcReadouts);
+document.getElementById('qMargin').addEventListener('input', e=>{ state.quoteMargin = num(e.target.value); recalcReadouts(); scheduleAutosave(); });
 document.getElementById('currencySymbol').addEventListener('input', e=>{ state.currency = e.target.value || '₹'; recalcReadouts(); saveSettings(); });
 document.getElementById('marginDisplayMode').addEventListener('change', e=>{ state.marginDisplayMode = e.target.value; recalcReadouts(); saveSettings(); });
 document.getElementById('qStatus').addEventListener('change', e=>{ state.quoteStatus = e.target.value; scheduleAutosave(); });
@@ -1220,20 +1377,32 @@ document.getElementById('exportPdfBtn').addEventListener('click', async ()=>{
   const [hr,hg,hb] = hexToRgb(state.headerColor);
   // jsPDF's built-in fonts (helvetica/times/courier) have no glyph for ₹ — falls back to a
   // garbled character. Use "Rs." for any INR-style symbol in the PDF; pass other symbols through.
-  const pdfCurrencyLabel = (state.currency === '₹' || state.currency === 'Rs' || state.currency === 'Rs.') ? 'Rs. ' : (state.currency + ' ');
+  const quoteCurrency = activeRates().currency;
+  const pdfCurrencyLabel = (quoteCurrency === '₹' || quoteCurrency === 'Rs' || quoteCurrency === 'Rs.') ? 'Rs. ' : (quoteCurrency + ' ');
   function pdfCurrency(amount){ return pdfCurrencyLabel + Number(amount).toLocaleString('en-IN',{maximumFractionDigits:0}); }
   let y = margin;
 
-  doc.setFillColor(br,bg,bb); doc.rect(0,0,pageWidth,74,'F');
-  if(state.companyLogo){
-    try{ doc.addImage(state.companyLogo, imgFormatFromDataUrl(state.companyLogo), margin, 10, 60, 54); }catch(err){ console.warn('logo embed failed', err); }
+  // Every page gets the letterhead band. Pages 2+ used to be completely unbranded \u2014 an
+  // anonymous sheet of numbers is not something to send a customer.
+  function drawHeaderBand(compact){
+    const h = compact ? 46 : 74;
+    doc.setFillColor(br,bg,bb); doc.rect(0,0,pageWidth,h,'F');
+    if(state.companyLogo){
+      try{ doc.addImage(state.companyLogo, imgFormatFromDataUrl(state.companyLogo), margin, compact?8:10, compact?34:60, compact?30:54); }
+      catch(err){ console.warn('logo embed failed', err); }
+    }
+    const tx = state.companyLogo ? margin + (compact?44:72) : margin;
+    doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(compact?13:20);
+    doc.text('JMC ENGINEERING', tx, compact?24:34);
+    doc.setTextColor(230,230,230); doc.setFont('helvetica','normal'); doc.setFontSize(compact?8:9.5);
+    if(compact){
+      doc.text('Quotation ' + (document.getElementById('qQuoteNo').value || '') + ' (continued)', tx, 36);
+    } else {
+      doc.text('Padi, Chennai \u00b7 Jigs \u00b7 Fixtures \u00b7 Press Tools \u00b7 Plastic Moulds', tx, 50);
+      doc.text('GSTIN: 33AXRPJ5951H1Z5   |   Ph: 7305187874', tx, 63);
+    }
   }
-  const textX = state.companyLogo ? margin+72 : margin;
-  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(20);
-  doc.text('JMC ENGINEERING', textX, 34);
-  doc.setTextColor(230,230,230); doc.setFont('helvetica','normal'); doc.setFontSize(9.5);
-  doc.text('Padi, Chennai · Jigs · Fixtures · Press Tools · Plastic Moulds', textX, 50);
-  doc.text('GSTIN: 33AXRPJ5951H1Z5   |   Ph: 7305187874', textX, 63);
+  drawHeaderBand(false);
   y = 96;
 
   doc.setTextColor(30,30,30); doc.setFont('helvetica','bold'); doc.setFontSize(16);
@@ -1270,6 +1439,9 @@ document.getElementById('exportPdfBtn').addEventListener('click', async ()=>{
     ...activeCols.map(c=>c.label), ...tailCols.map(c=>c.label) ]];
   const photoColIdx = showPhoto ? 2 : -1;
 
+  // Print whole rupees and total the PRINTED figures. Summing unrounded values while
+  // printing rounded ones meant the line items never quite added up to the grand total.
+  const lineTotals = state.parts.map(p=>Math.round(computePart(p).lineTotal));
   const body = state.parts.map((p, idx)=>{
     const c = computePart(p);
     const row = [idx+1, p.partNo!=null?p.partNo:'-'];
@@ -1290,7 +1462,7 @@ document.getElementById('exportPdfBtn').addEventListener('click', async ()=>{
         else row.push(c.margin.toFixed(0)+` (${c.marginPct}%)`);
       }
       else if(tc.key==='subTotal') row.push(c.subTotal.toFixed(0));
-      else if(tc.key==='lineTotal') row.push(c.lineTotal.toFixed(0));
+      else if(tc.key==='lineTotal') row.push(String(lineTotals[idx]));
     });
     return row;
   });
@@ -1298,8 +1470,13 @@ document.getElementById('exportPdfBtn').addEventListener('click', async ()=>{
   const imageDims = await Promise.all(state.parts.map(p => p.image ? getImageNaturalSize(p.image) : Promise.resolve(null)));
 
   doc.autoTable({
-    head, body, startY: y, margin:{left:margin,right:margin},
+    head, body, startY: y, margin:{left:margin, right:margin, top:62},
     tableWidth: usableWidth,
+    didDrawPage: (data)=>{
+      const pn = (doc.getCurrentPageInfo && doc.getCurrentPageInfo().pageNumber)
+              || (data && data.pageNumber) || 1;
+      if(pn > 1) drawHeaderBand(true);
+    },
     theme: 'grid',
     styles:{fontSize:9, cellPadding:4, font:'helvetica', minCellHeight: showPhoto?42:0, lineWidth:0.4, lineColor:[224,218,204]},
     headStyles:{fillColor:[hr,hg,hb], textColor:[240,240,240], fontStyle:'bold', lineColor:[hr,hg,hb]},
@@ -1319,7 +1496,7 @@ document.getElementById('exportPdfBtn').addEventListener('click', async ()=>{
           const drawW = dims.w*scale, drawH = dims.h*scale;
           const drawX = data.cell.x + (data.cell.width-drawW)/2;
           const drawY = data.cell.y + (data.cell.height-drawH)/2;
-          try{ doc.addImage(p.image, 'JPEG', drawX, drawY, drawW, drawH); }
+          try{ doc.addImage(p.image, imgFormatFromDataUrl(p.image), drawX, drawY, drawW, drawH); }
           catch(err){ console.warn('PDF image embed failed for row', data.row.index, err); }
         }
       }
@@ -1329,15 +1506,15 @@ document.getElementById('exportPdfBtn').addEventListener('click', async ()=>{
   let finalY = doc.lastAutoTable.finalY + 16;
   if(state.extraItems.length){
     doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(30,30,30); doc.text('Additional Charges', margin, finalY); finalY += 4;
-    const exBody = state.extraItems.filter(e=>e.description).map(e=>[e.description, num(e.amount).toFixed(0)]);
+    const exBody = state.extraItems.filter(e=>e.description).map(e=>[e.description, String(Math.round(num(e.amount)))]);
     doc.autoTable({ body: exBody, startY: finalY+4, margin:{left:margin,right:margin}, tableWidth: usableWidth/2,
       styles:{fontSize:9.5, cellPadding:4, lineWidth:0.4, lineColor:[224,218,204]}, theme:'grid',
       columnStyles:{1:{halign:'right', cellWidth:110}} });
     finalY = doc.lastAutoTable.finalY + 12;
   }
 
-  const partsTotal = state.parts.reduce((s,p)=>s+computePart(p).lineTotal,0);
-  const extraTotal = state.extraItems.reduce((s,e)=>s+num(e.amount),0);
+  const partsTotal = lineTotals.reduce((s,v)=>s+v,0);
+  const extraTotal = state.extraItems.reduce((s,e)=>s+Math.round(num(e.amount)),0);
   const grand = partsTotal + extraTotal;
   doc.setDrawColor(br,bg,bb); doc.setLineWidth(1); doc.line(margin, finalY, pageWidth-margin, finalY); finalY += 22;
   doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(br,bg,bb);
@@ -1374,6 +1551,15 @@ document.getElementById('exportPdfBtn').addEventListener('click', async ()=>{
   doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(100,100,100);
   doc.text('Prices in INR, Ex-Works Padi, Chennai. Taxes as applicable. Subject to JMC Engineering standard terms.', margin, finalY);
 
+  // Page numbers, added last so the total count is known.
+  const pageCount = doc.getNumberOfPages();
+  for(let i=1; i<=pageCount; i++){
+    doc.setPage(i);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(130,130,130);
+    doc.text('Page '+i+' of '+pageCount, pageWidth-margin, pageHeight-16, {align:'right'});
+    doc.text(qn || 'JMC Quotation', margin, pageHeight-16);
+  }
+
   doc.save(`${qn||'JMC-Quote'}.pdf`);
 });
 
@@ -1385,6 +1571,9 @@ document.getElementById('exportXlsxBtn').addEventListener('click', ()=>{
   rows.push([`Quote No: ${document.getElementById('qQuoteNo').value}`]);
   rows.push([`Part No: ${document.getElementById('qPartNo').value}`, '', `Part Name: ${document.getElementById('qPartName').value}`, '', `Operation: ${document.getElementById('qOperation').value}`]);
   rows.push([`Customer: ${document.getElementById('qCustomer').value}`, '', `Date: ${document.getElementById('qDate').value}`]);
+  rows.push([state.quoteRatesLinked
+    ? 'Rates: current Rate Master'
+    : 'Rates: as saved with this quote' + (state.quoteRatesSavedAt ? ' on ' + new Date(state.quoteRatesSavedAt).toLocaleDateString('en-IN') : '')]);
   rows.push([]);
   const header = ['S.No','Part No','Description','Shape','Material','Dia','T','W','L','Qty','Weight(kg)','RM Rate/kg','RM Cost',
     ...PROC_COLS.map(c=>c.label), 'Sum','Margin %','Margin','Sub Total /pc','Line Total','Photo'];
@@ -1402,7 +1591,7 @@ document.getElementById('exportXlsxBtn').addEventListener('click', ()=>{
 
   state.parts.forEach((p, idx)=>{
     const c = computePart(p);
-    const mat = state.materials.find(m=>m.id===p.materialId) || {rate:0};
+    const mat = activeRates().materials.find(m=>m.id===p.materialId) || {rate:0, name:'(removed material)'};
     rows.push([
       idx+1, p.partNo!=null?p.partNo:'', p.description, p.shape, p.shape==='standard'?'—':(mat.name||''),
       p.shape==='round'?num(p.dia):'', p.shape==='block'?num(p.t):'', p.shape==='block'?num(p.w):'', (p.shape!=='standard')?num(p.l):'',
@@ -1429,27 +1618,29 @@ document.getElementById('exportXlsxBtn').addEventListener('click', ()=>{
 
   state.parts.forEach((p,i)=>{
     const r = dataStartRow + i;
+    const c = computePart(p);
     const rmCell = L(col.rm, r);
-    ws[rmCell] = {t:'n', f:`${L(col.wt,r)}*${L(col.rate,r)}`};
+    ws[rmCell] = {t:'n', v:Number(c.rmCost.toFixed(2)), f:`${L(col.wt,r)}*${L(col.rate,r)}`};
     const procFirstCell = L(col.procStart, r);
     const procLastCell = L(col.procStart+procCount-1, r);
     const sumCell = L(sumCol, r);
-    ws[sumCell] = {t:'n', f:`${rmCell}+SUM(${procFirstCell}:${procLastCell})`};
+    ws[sumCell] = {t:'n', v:Number(c.sum.toFixed(2)), f:`${rmCell}+SUM(${procFirstCell}:${procLastCell})`};
     const marginCell = L(marginCol, r);
-    ws[marginCell] = {t:'n', f:`${sumCell}*${L(marginPctCol,r)}/100`};
+    ws[marginCell] = {t:'n', v:Number(c.margin.toFixed(2)), f:`${sumCell}*${L(marginPctCol,r)}/100`};
     const subTotalCell = L(subTotalCol, r);
-    ws[subTotalCell] = {t:'n', f:`${sumCell}+${marginCell}`};
+    ws[subTotalCell] = {t:'n', v:Number(c.subTotal.toFixed(2)), f:`${sumCell}+${marginCell}`};
     const lineTotalCell = L(lineTotalColIdx, r);
-    ws[lineTotalCell] = {t:'n', f:`${subTotalCell}*${L(col.qty,r)}`};
+    ws[lineTotalCell] = {t:'n', v:Number(c.lineTotal.toFixed(2)), f:`${subTotalCell}*${L(col.qty,r)}`};
   });
 
   const lastPartRow = dataStartRow + state.parts.length - 1;
   const extraAmountColIdx = lineTotalColIdx;
   const grandCell = L(lineTotalColIdx, grandRow);
+  const grandValue = Number(quoteGrandTotal().toFixed(2));
   if(state.parts.length && state.extraItems.length){
-    ws[grandCell] = {t:'n', f:`SUM(${L(lineTotalColIdx,dataStartRow)}:${L(lineTotalColIdx,lastPartRow)})+SUM(${L(extraAmountColIdx,extraStart)}:${L(extraAmountColIdx,extraStart+state.extraItems.length-1)})`};
+    ws[grandCell] = {t:'n', v:grandValue, f:`SUM(${L(lineTotalColIdx,dataStartRow)}:${L(lineTotalColIdx,lastPartRow)})+SUM(${L(extraAmountColIdx,extraStart)}:${L(extraAmountColIdx,extraStart+state.extraItems.length-1)})`};
   } else if(state.parts.length){
-    ws[grandCell] = {t:'n', f:`SUM(${L(lineTotalColIdx,dataStartRow)}:${L(lineTotalColIdx,lastPartRow)})`};
+    ws[grandCell] = {t:'n', v:grandValue, f:`SUM(${L(lineTotalColIdx,dataStartRow)}:${L(lineTotalColIdx,lastPartRow)})`};
   }
 
   ws['!cols'] = header.map(()=>({wch:12}));
@@ -1479,7 +1670,9 @@ const msalConfig = {
   auth: {
     clientId: '248daf88-bf2b-4f29-9295-ab2e707fa3ef',
     authority: 'https://login.microsoftonline.com/ae273161-7bde-4004-9e52-0ebbee8e3c0d',
-    redirectUri: window.location.href
+    // MSAL requires an exact match against the URI registered on the Azure app. Using
+    // location.href meant any ?utm_source= or #fragment on the URL broke sign-in.
+    redirectUri: window.location.origin + window.location.pathname
   }
 };
 let msalInstance;
@@ -1578,13 +1771,25 @@ async function ensureOneDriveFolder(token){
   }
 }
 
-async function uploadJsonToOneDrive(token, fileName, dataObj){
+// Graph's simple PUT /content tops out at 4 MB; past that it needs a resumable upload
+// session. Refuse with a clear message rather than letting it fail as an opaque 413.
+const GRAPH_SIMPLE_UPLOAD_LIMIT = 4 * 1024 * 1024;
+const UPLOAD_SAFE_LIMIT = 3.5 * 1024 * 1024;   // leave headroom for header overhead
+function jsonBodyFor(dataObj){ return JSON.stringify(dataObj, null, 2); }
+async function uploadJsonToOneDrive(token, fileName, dataObj, prebuiltBody){
   const folder = oneDriveFolderName();
+  const body = prebuiltBody !== undefined ? prebuiltBody : jsonBodyFor(dataObj);
+  if(body.length > GRAPH_SIMPLE_UPLOAD_LIMIT){
+    const err = new Error('This quote is '+(body.length/1048576).toFixed(1)+' MB, over OneDrive\u2019s 4 MB single-file limit. '
+      + 'Remove or re-paste a few part photos at a smaller size, then save again.');
+    err.code = 'TOO_LARGE';
+    throw err;
+  }
   const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(folder)}/${encodeURIComponent(fileName)}:/content`;
   const res = await fetch(url, {
     method:'PUT',
     headers:{Authorization:`Bearer ${token}`, 'Content-Type':'application/json'},
-    body: JSON.stringify(dataObj, null, 2)
+    body
   });
   if(!res.ok) throw new Error('Upload to OneDrive failed (status '+res.status+').');
   return res.json();
@@ -1625,41 +1830,89 @@ async function deleteOneDriveItem(token, fileName){  const folder = oneDriveFold
   return true;
 }
 
-function settingsPayload(){
+/* ---- Saved-quote index -------------------------------------------------
+   Graph only returns file metadata when listing a folder, so customer name,
+   status and total were never available to the Saved Quotes list \u2014 the code
+   read item._customer / item._status, which nothing ever set. Keep a small
+   sidecar index instead, updated on every save and delete, with a rebuild for
+   quotes saved before it existed.                                          */
+const INDEX_FILE = '_index.json';
+const MACHINE_FILES = ['_settings.json', INDEX_FILE, '_autosave_working.json'];
+let quoteIndex = {};
+
+function indexEntryFor(payload){
   return {
-    materials: state.materials, processRates: state.processRates, stockAllowance: state.stockAllowance,
-    defaultMargin: state.defaultMargin, currency: state.currency, companyLogo: state.companyLogo, eSignature: state.eSignature,
-    brandColor: state.brandColor, headerColor: state.headerColor, pdfColumns: state.pdfColumns, pdfAutoHide: state.pdfAutoHide, marginDisplayMode: state.marginDisplayMode, lastQuoteSeq: state.lastQuoteSeq
+    quoteNo: payload.quoteNo || '',
+    customer: payload.customer || '',
+    partName: payload.partName || '',
+    status: payload.status || 'Open',
+    savedAt: payload.savedAt || new Date().toISOString(),
+    grandTotal: Math.round(num(payload.grandTotal))
   };
 }
+async function loadQuoteIndex(token){
+  try{
+    const folder = oneDriveFolderName();
+    const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(folder)}/${INDEX_FILE}:/content`;
+    const res = await fetch(url, {headers:{Authorization:`Bearer ${token}`}});
+    if(!res.ok) return {};
+    const json = await res.json();
+    return (json && json.quotes) ? json.quotes : {};
+  }catch(err){ return {}; }
+}
+async function writeQuoteIndex(token, quotes){
+  await uploadJsonToOneDrive(token, INDEX_FILE, {version:1, updatedAt:new Date().toISOString(), quotes});
+}
+async function updateQuoteIndex(token, fileName, payload){
+  // Best-effort: a failed index write must never fail the quote save itself.
+  try{
+    const quotes = await loadQuoteIndex(token);
+    quotes[fileName] = indexEntryFor(payload);
+    await writeQuoteIndex(token, quotes);
+    quoteIndex = quotes;
+  }catch(err){ console.warn('index update failed', err); }
+}
+async function removeFromQuoteIndex(token, fileName){
+  try{
+    const quotes = await loadQuoteIndex(token);
+    if(quotes[fileName]){ delete quotes[fileName]; await writeQuoteIndex(token, quotes); }
+    quoteIndex = quotes;
+  }catch(err){ console.warn('index delete failed', err); }
+}
+async function rebuildQuoteIndex(token, items){
+  const quotes = {};
+  for(const it of items){
+    try{
+      const data = await downloadOneDriveItem(it);
+      quotes[it.name] = indexEntryFor(Object.assign({}, data, {
+        savedAt: data.savedAt || it.lastModifiedDateTime,
+        grandTotal: data.grandTotal
+      }));
+    }catch(err){ console.warn('could not index', it.name, err); }
+  }
+  await writeQuoteIndex(token, quotes);
+  quoteIndex = quotes;
+  return quotes;
+}
+
 function applySettingsPayload(saved){
-  Object.assign(state, {
-    materials: saved.materials || state.materials,
-    processRates: Object.assign({}, defaultProcessRates(), saved.processRates || {}),
-    stockAllowance: saved.stockAllowance ?? state.stockAllowance,
-    defaultMargin: saved.defaultMargin ?? state.defaultMargin,
-    currency: saved.currency || state.currency,
-    companyLogo: (saved.companyLogo !== undefined) ? saved.companyLogo : state.companyLogo,
-    eSignature: (saved.eSignature !== undefined) ? saved.eSignature : state.eSignature,
-    brandColor: saved.brandColor || state.brandColor,
-    headerColor: saved.headerColor || state.headerColor,
-    pdfColumns: Object.assign({}, state.pdfColumns, saved.pdfColumns || {}),
-    pdfAutoHide: (saved.pdfAutoHide !== undefined) ? saved.pdfAutoHide : state.pdfAutoHide,
-    marginDisplayMode: saved.marginDisplayMode || state.marginDisplayMode,
-    lastQuoteSeq: saved.lastQuoteSeq ?? state.lastQuoteSeq
-  });
+  mergeSettings(saved);
   renderMaterials(); renderProcessRates(); renderProcessHeaders(); renderPdfColumnToggles();
-  document.getElementById('pdfAutoHide').checked = state.pdfAutoHide;
-  document.getElementById('marginDisplayMode').value = state.marginDisplayMode;
-  renderBranding(); renderPartsMaterialOptions(); renderParts(); recalcReadouts();
+  syncCostingInputsFromState();
+  renderBranding(); renderPartsMaterialOptions(); renderParts(); renderRateBanner();
 }
 
 async function saveSettingsToOneDrive(){
+  if(!msalInstance || !msalInstance.getAllAccounts().length) return; // gate isn't passed yet
   try{
     const token = await getGraphToken(false);
     await ensureOneDriveFolder(token);
     await uploadJsonToOneDrive(token, '_settings.json', settingsPayload());
-  }catch(err){ /* not signed in yet, or a transient network issue — Claude-preview storage still covers this session */ }
+    setStoragePill('Rates synced ' + new Date().toLocaleTimeString('en-IN'), 'ok');
+  }catch(err){
+    console.warn('settings sync failed', err);
+    setStoragePill('Rate sync FAILING \u2014 use "Sync settings now"', 'error');
+  }
 }
 async function loadSettingsFromOneDrive(){
   try{
@@ -1683,6 +1936,10 @@ document.getElementById('syncSettingsBtn').addEventListener('click', async ()=>{
   }finally{ btn.textContent = orig; btn.disabled = false; }
 });
 
+/* The quote as comparable content. Deliberately carries NO timestamp: this value is
+   JSON-stringified and compared against itself to decide "has anything changed?", and a
+   savedAt stamped at call time made every comparison unequal \u2014 which silently broke both
+   the unsaved-changes warning and the auto-save de-duplication. */
 function collectQuoteData(){
   return {
     quoteNo: document.getElementById('qQuoteNo').value,
@@ -1691,13 +1948,28 @@ function collectQuoteData(){
     operation: document.getElementById('qOperation').value,
     customer: document.getElementById('qCustomer').value,
     date: document.getElementById('qDate').value,
-    margin: document.getElementById('qMargin').value,
+    margin: String(state.quoteMargin),
     validity: document.getElementById('qValidity').value,
     status: state.quoteStatus || 'Open',
     parts: state.parts,
     extraItems: state.extraItems,
-    savedAt: new Date().toISOString()
+    // The rates this quote is costed with, frozen into the file. This is what stops a
+    // saved quote from re-pricing itself when the Rate Master changes later.
+    rates: cloneRates(activeRates()),
+    ratesLinked: state.quoteRatesLinked
   };
+}
+/* The quote as written to OneDrive \u2014 content plus the timestamp. */
+function quoteFilePayload(){
+  const d = collectQuoteData();
+  d.savedAt = new Date().toISOString();
+  d.ratesSavedAt = state.quoteRatesLinked ? d.savedAt : (state.quoteRatesSavedAt || d.savedAt);
+  d.grandTotal = quoteGrandTotal();
+  return d;
+}
+function quoteGrandTotal(){
+  return state.parts.reduce((s,p)=>s+computePart(p).lineTotal,0)
+       + state.extraItems.reduce((s,e)=>s+num(e.amount),0);
 }
 function renderQuoteStatus(){
   const sel = document.getElementById('qStatus');
@@ -1714,9 +1986,7 @@ function hasUnsavedChanges(){
   const now = currentSnapshot();
   if(lastSavedSnapshot === null) {
     // Never saved: only "dirty" if the user actually put something in.
-    return state.parts.some(p=>p.description||p.t||p.dia||p.image||p.partNo) ||
-           !!document.getElementById('qCustomer').value ||
-           !!document.getElementById('qPartName').value;
+    return quoteHasContent();
   }
   return now !== lastSavedSnapshot;
 }
@@ -1732,18 +2002,25 @@ function startNewQuote(){
     {description:'Assemble & Transport', amount:5000},
   ];
   state.quoteStatus = 'Open';
+  state.quoteRates = null;
+  state.quoteRatesLinked = true;
+  state.quoteRatesLegacy = false;
+  state.quoteRatesSavedAt = null;
   document.getElementById('qQuoteNo').value = nextQuoteNumber();
   document.getElementById('qPartNo').value = '';
   document.getElementById('qPartName').value = '';
   document.getElementById('qOperation').value = '';
   document.getElementById('qCustomer').value = '';
   document.getElementById('qDate').value = new Date().toISOString().slice(0,10);
-  document.getElementById('qMargin').value = state.defaultMargin;
+  setQuoteMargin(state.defaultMargin);
   document.getElementById('qValidity').value = 15;
   renderQuoteStatus();
   renderParts();
   renderExtras();
+  renderRateBanner();
   lastSavedSnapshot = null;
+  // The recovery copy described the quote we just discarded.
+  discardAutosaveFile();
   document.querySelector('.tab[data-tab="quote"]').click();
 }
 document.getElementById('newQuoteBtn').addEventListener('click', startNewQuote);
@@ -1759,7 +2036,6 @@ function applyQuoteData(q){
   document.getElementById('qOperation').value = q.operation || '';
   document.getElementById('qCustomer').value = q.customer || '';
   document.getElementById('qDate').value = q.date || '';
-  document.getElementById('qMargin').value = q.margin || state.defaultMargin;
   document.getElementById('qValidity').value = q.validity || 15;
   const loadedParts = (q.parts || []).map(p=>{
     // Re-key every loaded part with a fresh unique id and advance the global counter past it.
@@ -1775,8 +2051,27 @@ function applyQuoteData(q){
   state.parts = loadedParts;
   state.extraItems = q.extraItems || [];
   state.quoteStatus = q.status || 'Open';
+  setQuoteMargin(q.margin || state.defaultMargin);
+
+  // ---- rate context ----
+  if(q.rates && Array.isArray(q.rates.materials) && q.rates.materials.length){
+    state.quoteRates = cloneRates(q.rates);
+    state.quoteRatesSavedAt = q.ratesSavedAt || q.savedAt || null;
+    state.quoteRatesLegacy = false;
+    // The crash-recovery file remembers whether you were still following the Rate Master;
+    // a quote opened from Saved Quotes always keeps its own stored rates.
+    state.quoteRatesLinked = q._autosave ? !!q.ratesLinked : false;
+  } else {
+    // Saved before rate snapshots existed — there is nothing to restore, so fall back to
+    // the current master and say so rather than pretending the price is the original one.
+    state.quoteRates = null;
+    state.quoteRatesLinked = true;
+    state.quoteRatesLegacy = !q._autosave;
+    state.quoteRatesSavedAt = null;
+  }
+
   renderQuoteStatus();
-  renderParts(); renderExtras();
+  renderParts(); renderExtras(); renderRateBanner();
   // A just-loaded quote matches what's in OneDrive — treat it as clean.
   if(!q._autosave){ markQuoteSaved(); } else { lastSavedSnapshot = null; }
 }
@@ -1798,14 +2093,26 @@ document.getElementById('saveQuoteBtn').addEventListener('click', async ()=>{
         btn.textContent = orig; btn.disabled = false; return;
       }
     }
-    await uploadJsonToOneDrive(token, qn + '.json', collectQuoteData());
+    const payload = quoteFilePayload();
+    await uploadJsonToOneDrive(token, qn + '.json', payload);
     const seq = parseQuoteSeq(qn);
     if(seq && seq > state.lastQuoteSeq){ state.lastQuoteSeq = seq; saveSettings(); }
+    // The quote now owns the rates it was costed with.
+    state.quoteRatesSavedAt = payload.ratesSavedAt;
+    state.quoteRatesLegacy = false;
     markQuoteSaved();
+    renderRateBanner();
+    await updateQuoteIndex(token, qn + '.json', payload);
+    // The crash-recovery copy is redundant once the quote is safely saved under its
+    // real name; leaving it behind is what made the "restore unsaved work?" prompt
+    // reappear on every single sign-in.
+    discardAutosaveFile();
     alert('Saved "'+qn+'" to your OneDrive "'+oneDriveFolderName()+'" folder.');
     refreshSavedQuotesList();
   }catch(err){
-    alert(err.code==='NOT_SIGNED_IN' ? 'Sign in with Microsoft first (top right), then try saving again.' : 'Could not save to OneDrive: '+err.message);
+    alert(err.code==='NOT_SIGNED_IN' ? 'Sign in with Microsoft first (top right), then try saving again.'
+        : err.code==='TOO_LARGE' ? err.message
+        : 'Could not save to OneDrive: '+err.message);
   }finally{ btn.textContent = orig; btn.disabled = false; }
 });
 
@@ -1837,29 +2144,32 @@ function scheduleAutosave(){
 
 async function runAutosave(){
   if(autosaveInFlight) return;
-  const hasContent = state.parts.some(p=>p.description||p.t||p.dia||p.image) ||
-                     document.getElementById('qCustomer').value || document.getElementById('qPartName').value;
-  if(!hasContent) return;
+  if(!quoteHasContent()) return;
 
-  const payload = collectQuoteData();
+  // Compare the timestamp-free content. collectQuoteData() used to stamp savedAt at call
+  // time, so this check never matched and every cycle re-uploaded the whole quote,
+  // photos included, however little had changed.
+  const content = collectQuoteData();
+  const contentKey = JSON.stringify(content);
+  if(contentKey === lastAutosavePayload){ return; }
+
+  const payload = quoteFilePayload();
   payload._autosave = true;
-  const body = JSON.stringify(payload);
-  // Nothing changed since the last successful autosave — don't re-upload megabytes.
-  if(body === lastAutosavePayload){ return; }
+  const body = jsonBodyFor(payload);
 
-  const sizeMB = body.length / (1024*1024);
-  if(sizeMB > 30){
-    setAutosaveStatus('Too large to auto-save ('+sizeMB.toFixed(1)+' MB) — save manually', 'error');
+  // Measure exactly what will be uploaded, against the limit Graph actually enforces.
+  if(body.length > UPLOAD_SAFE_LIMIT){
+    setAutosaveStatus('Too large to auto-save ('+(body.length/1048576).toFixed(1)+' MB) \u2014 save manually', 'error');
     return;
   }
 
   autosaveInFlight = true;
-  setAutosaveStatus('Saving…');
+  setAutosaveStatus('Saving\u2026');
   try{
     const token = await getGraphToken(false);
     await ensureOneDriveFolder(token);
-    await uploadJsonToOneDrive(token, AUTOSAVE_FILE, payload);
-    lastAutosavePayload = body;
+    await uploadJsonToOneDrive(token, AUTOSAVE_FILE, payload, body);
+    lastAutosavePayload = contentKey;
     autosaveFailures = 0; autosaveWarned = false;
     setAutosaveStatus('Saved ' + new Date().toLocaleTimeString('en-IN'), 'ok');
   }catch(err){
@@ -1877,6 +2187,27 @@ async function runAutosave(){
   }finally{ autosaveInFlight = false; }
 }
 
+// One definition of "this quote has something in it", used by both autosave and the
+// unsaved-changes guard so they can't disagree about whether work is worth keeping.
+function quoteHasContent(){
+  return state.parts.some(p=>p.partNo||p.description||p.t||p.w||p.l||p.dia||p.image||p.unitPriceStd) ||
+         !!document.getElementById('qCustomer').value ||
+         !!document.getElementById('qPartName').value ||
+         !!document.getElementById('qPartNo').value;
+}
+
+// Drop the crash-recovery file. Best-effort and silent: it is a convenience copy, and
+// failing to delete it must never interrupt whatever the user was actually doing.
+async function discardAutosaveFile(){
+  lastAutosavePayload = null;
+  setAutosaveStatus('\u2014');
+  try{
+    if(!msalInstance || !msalInstance.getAllAccounts().length) return;
+    const token = await getGraphToken(false);
+    await deleteOneDriveItem(token, AUTOSAVE_FILE);
+  }catch(err){ /* nothing to delete, or offline — harmless */ }
+}
+
 async function offerAutosaveRestore(){
   try{
     const token = await getGraphToken(false);
@@ -1888,8 +2219,13 @@ async function offerAutosaveRestore(){
     if(!data || !data.savedAt) return;
     const when = new Date(data.savedAt).toLocaleString('en-IN');
     const label = data.quoteNo ? `"${data.quoteNo}"` : 'an unsaved quote';
-    if(confirm(`Unsaved work from ${when} was found (${label}). Restore it?\n\nOK = restore it · Cancel = start fresh`)){
+    if(confirm(`Unsaved work from ${when} was found (${label}). Restore it?\n\nOK = restore it · Cancel = discard it and start fresh`)){
       applyQuoteData(data);
+      lastAutosavePayload = JSON.stringify(collectQuoteData());
+    } else {
+      // Declining used to leave the file in place, so the same prompt came back every
+      // sign-in, forever. "Start fresh" now actually means it.
+      await discardAutosaveFile();
     }
   }catch(err){ /* no recovery file or unreadable — ignore */ }
 }
@@ -1900,8 +2236,19 @@ async function refreshSavedQuotesList(){
   try{
     const token = await getGraphToken(false);
     const items = await listOneDriveQuotes(token);
-    // Hide the machine files (settings + autosave recovery) from the user-facing list.
-    savedQuotesCache = items.filter(it=> it.name !== '_settings.json' && it.name !== AUTOSAVE_FILE);
+    // Hide the machine files (settings, index, autosave recovery) from the user-facing list.
+    savedQuotesCache = items.filter(it=> MACHINE_FILES.indexOf(it.name) === -1);
+    // Folder listing carries no quote contents, so customer/status/total come from the index.
+    quoteIndex = await loadQuoteIndex(token);
+    savedQuotesCache.forEach(it=>{
+      const meta = quoteIndex[it.name];
+      if(meta){
+        it._customer = meta.customer || '';
+        it._status = meta.status || '';
+        it._partName = meta.partName || '';
+        it._grandTotal = meta.grandTotal;
+      }
+    });
     // Keep the auto-number ahead of whatever's already saved in the folder.
     let maxSeq = state.lastQuoteSeq;
     savedQuotesCache.forEach(it=>{ const s = parseQuoteSeq(it.name); if(s && s > maxSeq) maxSeq = s; });
@@ -1921,6 +2268,7 @@ async function refreshSavedQuotesList(){
   }
 }
 
+const KNOWN_STATUSES = ['Open','Sent','Won','Lost','On-Hold'];
 function renderSavedQuotesList(){
   const box = document.getElementById('savedQuotesList');
   const q = (document.getElementById('savedSearch').value || '').toLowerCase().trim();
@@ -1929,7 +2277,8 @@ function renderSavedQuotesList(){
     items = items.filter(it=>{
       const name = it.name.replace(/\.json$/,'').toLowerCase();
       const cust = (it._customer||'').toLowerCase();
-      return name.includes(q) || cust.includes(q);
+      const part = (it._partName||'').toLowerCase();
+      return name.includes(q) || cust.includes(q) || part.includes(q);
     });
   }
   if(!items.length){
@@ -1943,12 +2292,18 @@ function renderSavedQuotesList(){
     row.className = 'saved-quote-row';
     const modified = new Date(item.lastModifiedDateTime).toLocaleString('en-IN');
     const name = item.name.replace(/\.json$/,'');
-    const statusHtml = item._status ? `<span class="status-pill status-${item._status.replace(/\s/g,'-')}">${item._status}</span>` : '';
+    // item._status comes from a file in OneDrive — escape it, and only allow the
+    // known status names into the CSS class.
+    const statusHtml = (item._status && KNOWN_STATUSES.indexOf(item._status) !== -1)
+      ? `<span class="status-pill status-${item._status.replace(/\s/g,'-')}">${esc(item._status)}</span>` : '';
     const custHtml = item._customer ? ` · ${esc(item._customer)}` : '';
+    const partHtml = item._partName ? ` · ${esc(item._partName)}` : '';
+    const totalHtml = (item._grandTotal || item._grandTotal === 0)
+      ? ` · <b>${esc(fmt(item._grandTotal))}</b>` : '';
     row.innerHTML = `
       <div class="sq-meta">
         <b>${esc(name)}</b> ${statusHtml}<br>
-        <span class="note" style="margin:0;">Saved ${modified}${custHtml}</span>
+        <span class="note" style="margin:0;">Saved ${esc(modified)}${custHtml}${partHtml}${totalHtml}</span>
       </div>
       <div class="sq-actions">
         <button class="btn btn-outline btn-sm sq-load">Load</button>
@@ -1966,6 +2321,7 @@ function renderSavedQuotesList(){
       try{
         const token = await getGraphToken(true);
         await deleteOneDriveItem(token, item.name);
+        await removeFromQuoteIndex(token, item.name);
         savedQuotesCache = savedQuotesCache.filter(x=>x.name!==item.name);
         renderSavedQuotesList();
       }catch(err){ alert('Could not delete: '+err.message); }
@@ -1974,6 +2330,22 @@ function renderSavedQuotesList(){
   });
 }
 document.getElementById('refreshSavedBtn').addEventListener('click', refreshSavedQuotesList);
+document.getElementById('rebuildIndexBtn').addEventListener('click', async ()=>{
+  const btn = document.getElementById('rebuildIndexBtn');
+  const orig = btn.textContent;
+  try{
+    const token = await getGraphToken(true);
+    const items = (await listOneDriveQuotes(token)).filter(it=> MACHINE_FILES.indexOf(it.name) === -1);
+    if(!items.length){ alert('No saved quotes to index yet.'); return; }
+    if(!confirm('Read all '+items.length+' saved quote(s) to rebuild the customer/status index?\n\nThis is only needed once, for quotes saved before the index existed.')) return;
+    btn.textContent = 'Rebuilding\u2026'; btn.disabled = true;
+    await rebuildQuoteIndex(token, items);
+    await refreshSavedQuotesList();
+    alert('Index rebuilt for '+items.length+' quote(s).');
+  }catch(err){
+    alert(err.code==='NOT_SIGNED_IN' ? 'Sign in with Microsoft first (top right).' : 'Could not rebuild the index: '+err.message);
+  }finally{ btn.textContent = orig; btn.disabled = false; }
+});
 document.getElementById('savedSearch').addEventListener('input', renderSavedQuotesList);
 
 /* ================= INIT ================= */
@@ -1984,14 +2356,13 @@ async function bootApp(){
   if(appBooted) return;
   appBooted = true;
 
-  const storagePill = document.getElementById('storagePill');
   const storageNote = document.getElementById('storageNote');
   if(storageAvailable){
     await loadSettings();
-    storagePill.textContent = 'Settings auto-save: on (Claude)';
-    storageNote.textContent = 'Inside this Claude chat, logo/rates/PDF choices save automatically here too. Once deployed and signed in, they (and your quotes) save to OneDrive instead.';
+    setStoragePill('Settings auto-save: local + OneDrive');
+    storageNote.textContent = 'Logo, rates and PDF choices are kept in this browser and synced to your OneDrive folder whenever you are signed in.';
   } else {
-    storagePill.textContent = 'Settings auto-save: OneDrive';
+    setStoragePill('Settings auto-save: OneDrive');
     storageNote.textContent = "You're signed in, so settings and quotes save to your OneDrive folder. A crash-recovery copy of the quote you're editing is also kept automatically.";
   }
   document.getElementById('qDate').value = new Date().toISOString().slice(0,10);
@@ -2002,13 +2373,15 @@ async function bootApp(){
   renderProcessRates();
   renderProcessHeaders();
   renderPdfColumnToggles();
-  document.getElementById('pdfAutoHide').checked = state.pdfAutoHide;
-  document.getElementById('marginDisplayMode').value = state.marginDisplayMode;
-  document.getElementById('oneDriveFolderInput').value = state.oneDriveFolder;
+  // Saved rate-master values must reach the actual inputs. They never used to, and since
+  // costing read those inputs directly, every reload quietly costed at the defaults.
+  syncCostingInputsFromState();
+  setQuoteMargin(state.defaultMargin);
   renderBranding();
   renderQuoteStatus();
   renderExtras();
   renderParts();
+  renderRateBanner();
 
   // Mirror the uploaded logo into the login badge so the gate looks branded too.
   const lb = document.getElementById('loginBadge');
@@ -2028,19 +2401,9 @@ async function init(){
       }
     }catch(err){ console.warn('session resume failed', err); }
   }
-  // Claude preview only: real Microsoft login can't complete on this sandboxed origin,
-  // so offer a preview bypass to exercise the tool. This does NOT run on your deployed
-  // site (window.storage only exists inside Claude), so the gate stays hard once hosted.
-  if(storageAvailable){
-    const err = document.getElementById('loginError');
-    err.innerHTML = 'Preview mode: Microsoft login can’t complete inside Claude. <button id="previewBypass" style="background:none;border:none;color:#9ecbff;text-decoration:underline;cursor:pointer;font-size:12.5px;padding:0;">Open the tool without signing in</button>';
-    const bp = document.getElementById('previewBypass');
-    if(bp) bp.addEventListener('click', async ()=>{
-      showApp();
-      document.getElementById('authPill').textContent = 'Preview (not signed in)';
-      if(!appBooted){ await bootApp(); }
-    });
-  }
+  // No bypass path. An earlier build rendered an "Open the tool without signing in"
+  // button whenever a `window.storage` global happened to exist; shipping a sign-in
+  // bypass keyed on a sniffed global is not something that belongs in a costing tool.
   // Not signed in (or not authorized): stay on the gate. bootApp() runs after a successful sign-in.
 }
 init();
