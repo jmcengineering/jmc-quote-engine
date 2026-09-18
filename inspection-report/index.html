@@ -1853,7 +1853,12 @@ function wire(){
   $('btnExport').addEventListener('click', () => {
     const json = workspaceJSON();
     $('exportBox').value = json;
-    $('exportNote').textContent = Math.round(json.length / 1024) + ' KB';
+    // Some embedded viewers refuse page-initiated downloads outright. Rather
+    // than offer a button that does nothing, hide it and point at Copy.
+    const canDownload = typeof window.claude === 'undefined';
+    $('btnDownloadJson').hidden = !canDownload;
+    $('exportNote').textContent = Math.round(json.length / 1024) + ' KB' +
+      (canDownload ? '' : ' — downloads are blocked in this viewer, use Copy');
     openDialog($('dlgExport'));
   });
   $('btnCopyJson').addEventListener('click', () => {
