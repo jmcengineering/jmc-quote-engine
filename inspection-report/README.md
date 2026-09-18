@@ -85,7 +85,7 @@ every characteristic; opening it restores the report exactly.
 ./tests/run.sh
 ```
 
-64 assertions over the metrology engine and the audit rules, in Node against a
+73 assertions over the metrology engine and the audit rules, in Node against a
 stub DOM. No dependencies, same pattern as `../tests`.
 
 ## Making this an actual SaaS
