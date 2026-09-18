@@ -325,7 +325,7 @@ tr.group-row input{font-weight:600; background:var(--panel-3); border-style:dash
 .meta-row dd.mono{font-family:var(--mono); font-weight:500}
 
 /* Result block — ruled cells in the manner of a drawing title block. */
-.summary{display:flex; border:.35mm solid var(--paper-ink); margin-bottom:3mm; break-inside:avoid}
+.summary{display:flex; border:.2mm solid var(--paper-line); margin-bottom:3mm; break-inside:avoid}
 .sum-cell{flex:1 1 0; min-width:0; padding:1.3mm 2.4mm; border-left:.2mm solid var(--paper-line)}
 .sum-cell:first-child{border-left:0}
 .sum-cell .k{display:block; font-size:6.2pt; letter-spacing:.1em; text-transform:uppercase; color:var(--paper-soft)}
@@ -334,15 +334,15 @@ tr.group-row input{font-weight:600; background:var(--panel-3); border-style:dash
 .sum-cell[data-tone="cond"] .v{color:#7d5800}
 .sum-cell[data-tone="fail"] .v{color:#9c201a}
 .sum-verdict{
-  flex:0 0 46mm; padding:1.3mm 2.4mm; border-left:.35mm solid var(--paper-ink);
+  flex:0 0 46mm; padding:1.3mm 2.4mm; border-left:.2mm solid var(--paper-line);
   display:flex; flex-direction:column; justify-content:center;
 }
-.sum-verdict .k{display:block; font-size:6.2pt; letter-spacing:.1em; text-transform:uppercase; color:rgba(255,255,255,.78)}
-.sum-verdict .v{display:block; margin-top:.3mm; font-size:9.4pt; font-weight:700; letter-spacing:.11em; text-transform:uppercase; color:#fff}
-.sum-verdict[data-state="ok"]{background:#14663f}
-.sum-verdict[data-state="no"]{background:#9c201a}
-.sum-verdict[data-state="check"]{background:#7d5800}
-.sum-verdict[data-state="na"]{background:#5b6470}
+.sum-verdict .k{display:block; font-size:6.2pt; letter-spacing:.1em; text-transform:uppercase; color:var(--paper-soft)}
+.sum-verdict .v{display:block; margin-top:.3mm; font-size:9.4pt; font-weight:700; letter-spacing:.08em; text-transform:uppercase}
+.sum-verdict[data-state="ok"] .v{color:#14663f}
+.sum-verdict[data-state="no"] .v{color:#9c201a}
+.sum-verdict[data-state="check"] .v{color:#7d5800}
+.sum-verdict[data-state="na"] .v{color:#5b6470}
 
 /* results table */
 table.results{width:100%; border-collapse:collapse; font-size:7.8pt}
@@ -374,7 +374,7 @@ td.bln{font-weight:700}
 }
 .res-pass{background:#eef6f1; color:#14663f}
 .res-cond{background:#fbf4e4; color:#7d5800}
-.res-fail{background:#9c201a; color:#fff; border-color:#9c201a}
+.res-fail{background:#fbeceb; color:#9c201a}
 .res-none{background:#f2f4f7; color:#7b8695}
 td.dev-fail{color:#9c201a; font-weight:600}
 td.dev-cond{color:#7d5800; font-weight:600}
@@ -2111,7 +2111,7 @@ async function buildPDF(){
   cells.push(['Conformance', conform + '%', null]);
 
   const cellW = (W - verdictW) / cells.length;
-  doc.setDrawColor.apply(doc, INK); doc.setLineWidth(0.35);
+  doc.setDrawColor.apply(doc, LINE); doc.setLineWidth(0.2);
   doc.rect(L, y, W, blockH);
   cells.forEach(([k, v, tone], i) => {
     const x = L + i * cellW;
@@ -2125,12 +2125,13 @@ async function buildPDF(){
     doc.text(v, x + 2.2, y + 7.6);
   });
   const vx = L + W - verdictW;
-  doc.setFillColor.apply(doc, disp.state === 'ok' ? OK : disp.state === 'no' ? BAD
-                            : disp.state === 'check' ? WARN : SOFT);
-  doc.rect(vx, y, verdictW, blockH, 'F');
-  doc.setFont('helvetica','normal').setFontSize(6.2).setTextColor(255,255,255);
+  const dispRGB = disp.state === 'ok' ? OK : disp.state === 'no' ? BAD
+                : disp.state === 'check' ? WARN : SOFT;
+  doc.setDrawColor.apply(doc, LINE); doc.setLineWidth(0.15);
+  doc.line(vx, y, vx, y + blockH);
+  doc.setFont('helvetica','normal').setFontSize(6.2).setTextColor.apply(doc, SOFT);
   doc.text('DISPOSITION', vx + 2.4, y + 3.4);
-  doc.setFont('helvetica','bold').setFontSize(9.4);
+  doc.setFont('helvetica','bold').setFontSize(9.4).setTextColor.apply(doc, dispRGB);
   doc.text(String(disp.text).toUpperCase(), vx + 2.4, y + 7.6);
   y += blockH + 4;
 
@@ -2215,10 +2216,12 @@ async function buildPDF(){
         }
       }
       if (data.column.index === resCol) {
-        if (m.verdict === 'fail') { data.cell.styles.fillColor = BAD; data.cell.styles.textColor = [255,255,255]; }
-        else if (m.verdict === 'conditional') { data.cell.styles.fillColor = [251,244,228]; data.cell.styles.textColor = WARN; }
-        else if (m.verdict === 'pass') { data.cell.styles.fillColor = [238,246,241]; data.cell.styles.textColor = OK; }
-        else { data.cell.styles.fillColor = [242,244,247]; data.cell.styles.textColor = SOFT; }
+        const skin = { fail:[[251,236,235], BAD], conditional:[[251,244,228], WARN],
+                       pass:[[238,246,241], OK], none:[[242,244,247], SOFT] }[m.verdict];
+        data.cell.styles.fillColor = skin[0];
+        data.cell.styles.textColor = skin[1];
+        data.cell.styles.lineColor = skin[1];
+        data.cell.styles.lineWidth = { top:0.12, right:0.12, bottom:0.12, left:0.12 };
       }
     },
     didDrawCell(data){
