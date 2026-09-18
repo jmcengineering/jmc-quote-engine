@@ -1,0 +1,1954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Datum Report Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* ---------------------------------------------------------------------------
+   Datum Report Studio — white-label dimensional inspection reports.
+   Tokens follow the JMC Quote Engine palette so the two apps read as one suite.
+   The paper preview keeps fixed light tokens in both themes: a printed report
+   is white paper, and showing it dark would misrepresent the output.
+--------------------------------------------------------------------------- */
+:root{
+  --ground:#eceff4;
+  --panel:#ffffff;
+  --panel-2:#f5f7fa;
+  --panel-3:#e9edf3;
+  --ink:#14181d;
+  --ink-soft:#56606d;
+  --ink-faint:#8a94a2;
+  --line:#d7dde6;
+  --line-strong:#b6c0cd;
+  --accent:#003393;
+  --accent-2:#2f5fd0;
+  --accent-soft:#e3eafa;
+  --pass:#1b6f47;
+  --pass-soft:#e2f1e9;
+  --cond:#8a6100;
+  --cond-soft:#fbf0d8;
+  --fail:#ab241c;
+  --fail-soft:#fbe5e3;
+  --shadow:0 1px 2px rgba(20,24,29,.06), 0 8px 24px rgba(20,24,29,.08);
+  --sans:'IBM Plex Sans',-apple-system,'Segoe UI',Roboto,sans-serif;
+  --mono:'IBM Plex Mono','SF Mono',Consolas,'Courier New',monospace;
+
+  /* Paper tokens — identical in every theme, by design. */
+  --paper:#ffffff;
+  --paper-ink:#14181d;
+  --paper-soft:#5b6470;
+  --paper-faint:#8d97a3;
+  --paper-line:#c9d1da;
+  --paper-hair:#e4e9ef;
+  --paper-band:#f4f6f9;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#14181d;
+    --panel:#1b2128;
+    --panel-2:#212832;
+    --panel-3:#2b333e;
+    --ink:#e8ecf1;
+    --ink-soft:#a3adba;
+    --ink-faint:#78828f;
+    --line:#333c47;
+    --line-strong:#48535f;
+    --accent:#7d9be0;
+    --accent-2:#a6bcec;
+    --accent-soft:#25314a;
+    --pass:#6dc194;
+    --pass-soft:#1d3329;
+    --cond:#dfb65c;
+    --cond-soft:#332a14;
+    --fail:#f0867c;
+    --fail-soft:#3a201e;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.45);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#14181d;
+  --panel:#1b2128;
+  --panel-2:#212832;
+  --panel-3:#2b333e;
+  --ink:#e8ecf1;
+  --ink-soft:#a3adba;
+  --ink-faint:#78828f;
+  --line:#333c47;
+  --line-strong:#48535f;
+  --accent:#7d9be0;
+  --accent-2:#a6bcec;
+  --accent-soft:#25314a;
+  --pass:#6dc194;
+  --pass-soft:#1d3329;
+  --cond:#dfb65c;
+  --cond-soft:#332a14;
+  --fail:#f0867c;
+  --fail-soft:#3a201e;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.45);
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:var(--sans); font-size:14px; line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent-2); outline-offset:2px; border-radius:3px}
+
+/* ---------- shell ---------- */
+.app{display:flex; flex-direction:column; min-height:100%}
+.topbar{
+  position:sticky; top:env(safe-area-inset-top,0px); z-index:30;
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  padding:10px 16px; background:var(--panel); border-bottom:1px solid var(--line);
+}
+.brand{display:flex; align-items:center; gap:9px; margin-right:2px}
+.brand-mark{
+  width:26px; height:26px; border-radius:5px; background:var(--accent);
+  display:grid; place-items:center; color:#fff; flex:none;
+}
+.brand-mark svg{width:16px; height:16px; display:block}
+.brand-name{font-weight:600; letter-spacing:-.01em; white-space:nowrap}
+.brand-name span{color:var(--ink-faint); font-weight:400}
+.topbar-spacer{flex:1 1 auto}
+.tabs{display:flex; gap:2px; background:var(--panel-3); padding:3px; border-radius:7px; overflow-x:auto; max-width:100%}
+.tabs button{
+  border:0; background:transparent; padding:6px 12px; border-radius:5px;
+  font-size:13px; font-weight:500; color:var(--ink-soft); cursor:pointer; white-space:nowrap;
+  display:flex; align-items:center; gap:6px;
+}
+.tabs button:hover{color:var(--ink)}
+.tabs button[aria-selected="true"]{background:var(--panel); color:var(--ink); box-shadow:0 1px 2px rgba(20,24,29,.12)}
+.tab-count{
+  font:600 10px/1 var(--mono); padding:3px 5px; border-radius:20px;
+  background:var(--fail-soft); color:var(--fail);
+}
+.tab-count[data-zero="1"]{background:var(--pass-soft); color:var(--pass)}
+.btn{
+  border:1px solid var(--line-strong); background:var(--panel); color:var(--ink);
+  padding:6px 12px; border-radius:6px; font-size:13px; font-weight:500; cursor:pointer;
+  display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
+}
+.btn:hover{background:var(--panel-2); border-color:var(--ink-faint)}
+.btn-primary{background:var(--accent); border-color:var(--accent); color:#fff}
+.btn-primary:hover{background:var(--accent-2); border-color:var(--accent-2); color:#fff}
+.btn-sm{padding:3px 8px; font-size:12px}
+.btn-icon{padding:6px 8px}
+
+.demo-banner{
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  padding:8px 16px; background:var(--accent-soft); color:var(--ink);
+  border-bottom:1px solid var(--line); font-size:13px;
+}
+.demo-banner strong{font-weight:600}
+.demo-banner button{margin-left:auto}
+
+/* ---------- workspace ---------- */
+.work{
+  flex:1; display:grid; gap:16px; padding:16px;
+  padding-block:16px; grid-template-columns:minmax(0,1fr);
+  align-items:start;
+}
+@media (min-width:1100px){
+  .work{grid-template-columns:minmax(0,1fr) minmax(0,600px)}
+  .work[data-preview="off"]{grid-template-columns:minmax(0,1fr)}
+}
+.pane{min-width:0}
+.viewswitch{display:none}
+@media (max-width:1099px){
+  .viewswitch{display:flex; gap:2px; background:var(--panel-3); padding:3px; border-radius:7px}
+  .viewswitch button{border:0;background:transparent;padding:6px 14px;border-radius:5px;font-size:13px;font-weight:500;color:var(--ink-soft);cursor:pointer}
+  .viewswitch button[aria-selected="true"]{background:var(--panel); color:var(--ink)}
+  .work[data-mobile="editor"] .pane-preview{display:none}
+  .work[data-mobile="preview"] .pane-editor{display:none}
+}
+
+.card{
+  background:var(--panel); border:1px solid var(--line); border-radius:10px;
+  margin-bottom:14px; overflow:hidden;
+}
+.card-head{
+  display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;
+  padding:13px 16px; border-bottom:1px solid var(--line); background:var(--panel-2);
+}
+.card-head h2{margin:0; font-size:13px; font-weight:600; letter-spacing:.06em; text-transform:uppercase}
+.card-head p{margin:0; font-size:12.5px; color:var(--ink-soft); flex:1 1 220px}
+.card-body{padding:16px}
+
+.grid2{display:grid; gap:12px 14px; grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+.field{display:flex; flex-direction:column; gap:4px; min-width:0}
+.field.wide{grid-column:1/-1}
+.field label{font-size:11.5px; font-weight:500; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-soft)}
+.field .hint{font-size:11.5px; color:var(--ink-faint); text-transform:none; letter-spacing:0}
+.field input,.field select,.field textarea{
+  background:var(--panel-2); border:1px solid var(--line); border-radius:6px;
+  padding:7px 9px; font-size:13.5px; width:100%; min-width:0;
+}
+.field input:focus,.field select:focus,.field textarea:focus{background:var(--panel); border-color:var(--accent-2)}
+.field textarea{resize:vertical; min-height:56px}
+.field.num input{font-family:var(--mono); font-variant-numeric:tabular-nums}
+.field-check{flex-direction:row; align-items:center; gap:8px}
+.field-check input{width:auto}
+.field-check label{text-transform:none; letter-spacing:0; font-size:13.5px; color:var(--ink)}
+
+/* logo well */
+.logo-row{display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap}
+.logo-well{
+  width:150px; height:76px; border:1px dashed var(--line-strong); border-radius:8px;
+  display:grid; place-items:center; background:var(--panel-2); padding:6px; flex:none;
+}
+.logo-well img{max-width:100%; max-height:64px; object-fit:contain}
+.logo-well span{font-size:11.5px; color:var(--ink-faint); text-align:center}
+.logo-actions{display:flex; flex-direction:column; gap:7px; font-size:12.5px; color:var(--ink-soft)}
+.swatches{display:flex; gap:6px; flex-wrap:wrap}
+.swatch{width:26px;height:26px;border-radius:5px;border:2px solid transparent;cursor:pointer;padding:0}
+.swatch[aria-pressed="true"]{border-color:var(--ink); box-shadow:0 0 0 2px var(--panel)}
+
+/* ---------- characteristics editor ---------- */
+.char-scroll{overflow-x:auto; margin:0 -16px; padding:0 16px}
+table.editor{border-collapse:collapse; width:100%; min-width:1000px}
+table.editor th{
+  font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft);
+  text-align:left; font-weight:600; padding:0 6px 7px; white-space:nowrap;
+}
+table.editor td{padding:3px 6px 3px 0; vertical-align:middle}
+table.editor tbody tr:hover{background:var(--panel-2)}
+table.editor input,table.editor select{
+  background:var(--panel-2); border:1px solid var(--line); border-radius:5px;
+  padding:5px 6px; font-size:13px; width:100%;
+}
+table.editor input.n{font-family:var(--mono); font-variant-numeric:tabular-nums; text-align:right}
+table.editor input:focus,table.editor select:focus{background:var(--panel); border-color:var(--accent-2)}
+tr.group-row td{padding-top:10px}
+tr.group-row input{font-weight:600; background:var(--panel-3); border-style:dashed}
+.rowtools{display:flex; gap:3px; justify-content:flex-end}
+.rowtools button{
+  border:1px solid transparent; background:transparent; color:var(--ink-faint);
+  width:24px; height:24px; border-radius:5px; cursor:pointer; display:grid; place-items:center; padding:0;
+}
+.rowtools button:hover{background:var(--panel-3); color:var(--ink); border-color:var(--line)}
+.rowtools button svg{width:13px;height:13px;display:block}
+.verdict-cell{font:600 11px/1 var(--mono); letter-spacing:.04em; text-align:center; padding:4px 7px; border-radius:20px; white-space:nowrap}
+.v-pass{background:var(--pass-soft); color:var(--pass)}
+.v-cond{background:var(--cond-soft); color:var(--cond)}
+.v-fail{background:var(--fail-soft); color:var(--fail)}
+.v-none{background:var(--panel-3); color:var(--ink-faint)}
+.editor-actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:14px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ---------- audit ---------- */
+.audit-summary{display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px}
+.audit-stat{
+  flex:1 1 130px; border:1px solid var(--line); border-radius:8px; padding:11px 13px; background:var(--panel-2);
+}
+.audit-stat b{display:block; font:600 22px/1.1 var(--mono); font-variant-numeric:tabular-nums}
+.audit-stat span{font-size:11.5px; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-soft)}
+.audit-stat[data-tone="fail"] b{color:var(--fail)}
+.audit-stat[data-tone="warn"] b{color:var(--cond)}
+.audit-stat[data-tone="pass"] b{color:var(--pass)}
+.finding{
+  display:grid; grid-template-columns:auto minmax(0,1fr); gap:10px;
+  padding:11px 0; border-top:1px solid var(--line);
+}
+.finding:first-child{border-top:0}
+.finding-sev{
+  font:600 10px/1 var(--mono); letter-spacing:.06em; padding:4px 6px; border-radius:4px;
+  align-self:start; margin-top:2px; white-space:nowrap;
+}
+.sev-block{background:var(--fail-soft); color:var(--fail)}
+.sev-warn{background:var(--cond-soft); color:var(--cond)}
+.sev-note{background:var(--accent-soft); color:var(--accent)}
+.finding h3{margin:0 0 3px; font-size:13.5px; font-weight:600}
+.finding p{margin:0; font-size:13px; color:var(--ink-soft)}
+.finding p.fix{margin-top:4px; color:var(--ink-faint); font-size:12.5px}
+.finding code{font-family:var(--mono); font-size:12px; background:var(--panel-3); padding:1px 4px; border-radius:3px}
+.clean{display:flex; gap:10px; align-items:center; padding:18px; background:var(--pass-soft); border-radius:8px; color:var(--pass); font-weight:500}
+
+/* ---------- preview ---------- */
+.preview-bar{
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:10px;
+  font-size:12.5px; color:var(--ink-soft);
+}
+.preview-bar .grow{flex:1}
+.sheet-frame{
+  background:var(--panel-3); border:1px solid var(--line); border-radius:10px;
+  padding:14px; overflow:hidden;
+}
+.sheet-fit{overflow:hidden}
+.sheet{
+  width:210mm; min-height:297mm; background:var(--paper); color:var(--paper-ink);
+  transform-origin:top left; box-shadow:var(--shadow);
+  padding:13mm 12mm 16mm; font-size:8.6pt; line-height:1.35;
+  position:relative;
+}
+
+/* report header */
+.rpt-head{display:flex; gap:10mm; align-items:flex-start; padding-bottom:3mm}
+.rpt-logo{width:34mm; flex:none; display:flex; align-items:center; min-height:14mm}
+.rpt-logo img{max-width:100%; max-height:20mm; object-fit:contain; object-position:left}
+.rpt-logo .ph{
+  width:100%; border:1px dashed var(--paper-line); border-radius:2mm; padding:3mm 2mm;
+  text-align:center; font-size:7pt; color:var(--paper-faint);
+}
+.rpt-org{flex:1; min-width:0}
+.rpt-org h1{margin:0 0 .6mm; font-size:14pt; font-weight:700; letter-spacing:-.01em; line-height:1.15; color:var(--org-color,#003393)}
+.rpt-org .tag{font-size:8pt; font-weight:600; color:var(--paper-soft); margin-bottom:1mm}
+.rpt-org .addr{font-size:7.6pt; color:var(--paper-soft); white-space:pre-line}
+.rpt-title{text-align:right; flex:none; max-width:52mm}
+.rpt-title .t{font-size:9.6pt; font-weight:700; letter-spacing:.06em; text-transform:uppercase; line-height:1.25}
+.rpt-title .sub{font-size:7.4pt; color:var(--paper-soft); margin-top:1mm; font-family:var(--mono)}
+.rule{height:.7mm; background:var(--org-color,#003393); margin:0 0 3mm}
+.rule.thin{height:.25mm; background:var(--paper-line); margin:3mm 0}
+
+/* meta grid */
+.meta{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:0 6mm; margin-bottom:3mm}
+.meta-col h3{
+  margin:0 0 1.2mm; font-size:7pt; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--paper-faint); border-bottom:.25mm solid var(--paper-hair); padding-bottom:.8mm;
+}
+.meta-row{display:flex; gap:2mm; padding:.5mm 0; font-size:7.8pt; align-items:baseline}
+.meta-row dt{flex:0 0 26mm; color:var(--paper-soft)}
+.meta-row dd{margin:0; flex:1; font-weight:600; min-width:0; overflow-wrap:anywhere}
+.meta-row dd.blank{font-weight:400; color:#c0392b; font-style:italic}
+.meta-row dd.mono{font-family:var(--mono); font-weight:500}
+
+/* summary chips */
+.summary{display:flex; gap:2mm; flex-wrap:wrap; margin-bottom:3mm}
+.chip{
+  border:.25mm solid var(--paper-line); border-radius:1.5mm; padding:1.4mm 2.6mm;
+  display:flex; align-items:baseline; gap:1.6mm; background:var(--paper-band);
+}
+.chip b{font:600 10pt/1 var(--mono); font-variant-numeric:tabular-nums}
+.chip span{font-size:6.8pt; letter-spacing:.06em; text-transform:uppercase; color:var(--paper-soft)}
+.chip[data-tone="pass"]{background:#e8f4ee; border-color:#a8d4bd} .chip[data-tone="pass"] b{color:#14663f}
+.chip[data-tone="cond"]{background:#fcf3de; border-color:#e0c583} .chip[data-tone="cond"] b{color:#7d5800}
+.chip[data-tone="fail"]{background:#fbe8e6; border-color:#e5b0ab} .chip[data-tone="fail"] b{color:#9c201a}
+
+/* results table */
+table.results{width:100%; border-collapse:collapse; font-size:7.8pt}
+table.results thead th{
+  background:var(--paper-band); border-top:.3mm solid var(--paper-ink); border-bottom:.3mm solid var(--paper-ink);
+  padding:1.6mm 1.4mm; font-size:6.9pt; font-weight:700; letter-spacing:.05em; text-transform:uppercase;
+  text-align:right; white-space:nowrap;
+}
+table.results thead th.l{text-align:left}
+table.results thead th.c{text-align:center}
+table.results tbody td{
+  padding:1.3mm 1.4mm; border-bottom:.2mm solid var(--paper-hair); text-align:right;
+  font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:nowrap;
+}
+table.results tbody td.l{text-align:left; font-family:var(--sans)}
+table.results tbody td.c{text-align:center}
+table.results tbody tr{break-inside:avoid}
+table.results tbody tr.grp td{
+  background:var(--paper-band); font-family:var(--sans); font-weight:700; text-align:left;
+  font-size:7.4pt; letter-spacing:.04em; text-transform:uppercase; color:var(--paper-soft);
+  padding:1.6mm 1.4mm .9mm;
+}
+td.name{font-weight:600}
+td.name small{display:block; font-weight:400; font-size:6.8pt; color:var(--paper-faint); letter-spacing:.02em}
+td.bln{font-weight:700}
+.res{
+  display:inline-block; min-width:13mm; padding:.7mm 1.4mm; border-radius:1mm;
+  font-size:6.8pt; font-weight:700; letter-spacing:.05em; text-align:center;
+}
+.res-pass{background:#e8f4ee; color:#14663f}
+.res-cond{background:#fcf3de; color:#7d5800}
+.res-fail{background:#fbe8e6; color:#9c201a}
+.res-none{background:#eef1f5; color:#7b8695}
+td.dev-fail{color:#9c201a; font-weight:600}
+td.dev-cond{color:#7d5800; font-weight:600}
+.bar-cell{width:26mm; padding-right:0 !important}
+.bar-cell svg{display:block; width:100%; height:5.4mm}
+
+/* statement + signoff */
+.statement{
+  margin-top:3.5mm; padding:2.4mm 3mm; border:.25mm solid var(--paper-line); border-radius:1.5mm;
+  background:var(--paper-band); font-size:7.2pt; color:var(--paper-soft); break-inside:avoid;
+}
+.statement h4{margin:0 0 1mm; font-size:6.9pt; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--paper-ink)}
+.statement p{margin:0 0 1.2mm}
+.statement p:last-child{margin-bottom:0}
+.signoff{display:grid; grid-template-columns:repeat(3,1fr); gap:6mm; margin-top:6mm; break-inside:avoid}
+.sign{border-top:.3mm solid var(--paper-ink); padding-top:1.4mm}
+.sign .role{font-size:6.8pt; letter-spacing:.07em; text-transform:uppercase; color:var(--paper-faint)}
+.sign .who{font-size:8.4pt; font-weight:600; margin-top:.6mm; min-height:4mm}
+.sign .when{font-size:7pt; color:var(--paper-soft); font-family:var(--mono)}
+.sheet-foot{
+  display:flex; justify-content:space-between; gap:4mm; align-items:baseline;
+  margin-top:5mm; padding-top:1.6mm; border-top:.25mm solid var(--paper-hair);
+  font-size:6.8pt; color:var(--paper-faint);
+}
+.sheet-foot .mono{font-family:var(--mono)}
+.watermark{
+  position:absolute; top:46%; left:0; right:0; text-align:center; pointer-events:none;
+  font-size:52pt; font-weight:700; letter-spacing:.14em; color:rgba(171,36,28,.07);
+  transform:rotate(-22deg); text-transform:uppercase;
+}
+
+/* ---------- import dialog ---------- */
+dialog{
+  border:1px solid var(--line); border-radius:12px; padding:0; background:var(--panel); color:var(--ink);
+  max-width:min(680px,94vw); width:100%; box-shadow:var(--shadow);
+}
+dialog::backdrop{background:rgba(20,24,29,.5)}
+.dlg-head{display:flex; align-items:center; gap:10px; padding:14px 18px; border-bottom:1px solid var(--line)}
+.dlg-head h2{margin:0; font-size:15px; font-weight:600; flex:1}
+.dlg-body{padding:18px; max-height:60vh; overflow:auto}
+.dlg-body textarea{width:100%; min-height:170px; font-family:var(--mono); font-size:12.5px;
+  background:var(--panel-2); border:1px solid var(--line); border-radius:7px; padding:9px; resize:vertical}
+.dlg-body p{margin:0 0 10px; font-size:13px; color:var(--ink-soft)}
+.dlg-foot{display:flex; gap:8px; justify-content:flex-end; padding:14px 18px; border-top:1px solid var(--line)}
+.dlg-note{font-size:12.5px; color:var(--ink-faint); margin-right:auto; align-self:center}
+
+.toast{
+  position:fixed; left:50%; bottom:calc(20px + env(safe-area-inset-bottom,0px)); transform:translateX(-50%);
+  background:var(--ink); color:var(--ground); padding:10px 16px; border-radius:8px; font-size:13px;
+  box-shadow:var(--shadow); z-index:80; max-width:min(90vw,460px);
+}
+
+/* ---------- print ---------- */
+@media print{
+  @page{size:A4; margin:10mm 9mm 13mm}
+  body{background:#fff}
+  .topbar,.demo-banner,.pane-editor,.preview-bar,.viewswitch,.toast,dialog{display:none !important}
+  .work{display:block; padding:0; gap:0}
+  .sheet-frame{background:none; border:0; border-radius:0; padding:0; overflow:visible}
+  .sheet-fit{overflow:visible}
+  .sheet{
+    width:auto; min-height:0; box-shadow:none; padding:0; transform:none !important;
+    font-size:8.2pt;
+  }
+  table.results thead{display:table-header-group}
+  .sheet-foot{position:fixed; bottom:0; left:0; right:0; background:#fff}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none !important; transition:none !important}}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M3 17h18M7 17V9M12 17V5M17 17v-6"/>
+        </svg>
+      </span>
+      <span class="brand-name">Datum <span>Report Studio</span></span>
+    </div>
+
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button role="tab" data-tab="company" aria-selected="false">Company</button>
+      <button role="tab" data-tab="report" aria-selected="false">Report details</button>
+      <button role="tab" data-tab="chars" aria-selected="true">Characteristics</button>
+      <button role="tab" data-tab="audit" aria-selected="false">Audit <em class="tab-count" id="auditCount">0</em></button>
+    </nav>
+
+    <span class="topbar-spacer"></span>
+
+    <div class="viewswitch" role="tablist" aria-label="View">
+      <button role="tab" data-view="editor" aria-selected="true">Edit</button>
+      <button role="tab" data-view="preview" aria-selected="false">Preview</button>
+    </div>
+
+    <button class="btn" id="btnImport">Import</button>
+    <button class="btn" id="btnExport">Save file</button>
+    <button class="btn btn-primary" id="btnPrint">Print / PDF</button>
+  </header>
+
+  <div class="demo-banner" id="demoBanner">
+    <strong>Example report loaded.</strong>
+    <span>Sample Metrology Lab is placeholder branding — open <b>Company</b> to enter your own details and logo.</span>
+    <button class="btn btn-sm" id="btnDismissDemo">Got it</button>
+  </div>
+
+  <main class="work" id="work" data-mobile="editor" data-preview="on">
+
+    <!-- ============ EDITOR ============ -->
+    <section class="pane pane-editor" id="paneEditor">
+
+      <!-- Company -->
+      <div class="card" data-panel="company" hidden>
+        <div class="card-head">
+          <h2>Company profile</h2>
+          <p>Everything here is stamped onto every report you issue. Stored on this device until you save a workspace file.</p>
+        </div>
+        <div class="card-body">
+          <div class="logo-row" style="margin-bottom:16px">
+            <div class="logo-well" id="logoWell"><span>No logo yet</span></div>
+            <div class="logo-actions">
+              <input type="file" id="logoInput" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden>
+              <button class="btn btn-sm" id="btnLogo">Upload logo</button>
+              <button class="btn btn-sm" id="btnLogoClear">Remove</button>
+              <span>PNG, JPG, SVG or WebP. Scaled to 600&nbsp;px wide and stored inside the report file.</span>
+            </div>
+            <div style="flex:1 1 200px; min-width:180px">
+              <div class="field">
+                <label for="accentPick">Header colour</label>
+                <div class="swatches" id="accentSwatches"></div>
+                <input type="color" id="accentPick" style="margin-top:8px; height:34px; padding:2px">
+              </div>
+            </div>
+          </div>
+          <div class="grid2" id="companyFields"></div>
+        </div>
+      </div>
+
+      <!-- Report details -->
+      <div class="card" data-panel="report" hidden>
+        <div class="card-head">
+          <h2>Part &amp; order</h2>
+          <p>What was inspected, and against which drawing.</p>
+        </div>
+        <div class="card-body"><div class="grid2" id="fieldsPart"></div></div>
+      </div>
+      <div class="card" data-panel="report" hidden>
+        <div class="card-head">
+          <h2>Equipment &amp; conditions</h2>
+          <p>Traceability. A dimensional result without the instrument, its calibration status and the room temperature is not evidence.</p>
+        </div>
+        <div class="card-body"><div class="grid2" id="fieldsEquip"></div></div>
+      </div>
+      <div class="card" data-panel="report" hidden>
+        <div class="card-head">
+          <h2>Document control &amp; decision rule</h2>
+          <p>Who issued it, who approved it, and how conformance was decided.</p>
+        </div>
+        <div class="card-body"><div class="grid2" id="fieldsDoc"></div></div>
+      </div>
+
+      <!-- Characteristics -->
+      <div class="card" data-panel="chars">
+        <div class="card-head">
+          <h2>Characteristics</h2>
+          <p>One row per balloon on the drawing. Enter several measured values separated by commas to inspect more than one piece.</p>
+        </div>
+        <div class="card-body">
+          <div class="char-scroll">
+            <table class="editor">
+              <thead>
+                <tr>
+                  <th style="width:52px">Bln</th>
+                  <th style="width:190px">Characteristic</th>
+                  <th style="width:120px">Type</th>
+                  <th style="width:78px">Assoc.</th>
+                  <th style="width:92px">Nominal</th>
+                  <th style="width:84px">+Tol</th>
+                  <th style="width:84px">&minus;Tol</th>
+                  <th style="width:74px">U (k=2)</th>
+                  <th style="width:150px">Measured</th>
+                  <th style="width:84px">Result</th>
+                  <th style="width:112px"><span class="sr">Row actions</span></th>
+                </tr>
+              </thead>
+              <tbody id="charRows"></tbody>
+            </table>
+          </div>
+          <div class="editor-actions">
+            <button class="btn btn-primary btn-sm" id="btnAddChar">Add characteristic</button>
+            <button class="btn btn-sm" id="btnAddGroup">Add section heading</button>
+            <button class="btn btn-sm" id="btnPasteChars">Paste from CMM</button>
+            <button class="btn btn-sm" id="btnClearChars">Clear all</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Audit -->
+      <div class="card" data-panel="audit" hidden>
+        <div class="card-head">
+          <h2>Pre-issue audit</h2>
+          <p>Checks the report against ISO&nbsp;14253-1 decision rules and ISO/IEC&nbsp;17025 §7.8 content requirements before it leaves your hands.</p>
+        </div>
+        <div class="card-body">
+          <div class="audit-summary" id="auditSummary"></div>
+          <div id="auditList"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PREVIEW ============ -->
+    <section class="pane pane-preview" id="panePreview">
+      <div class="preview-bar">
+        <span class="grow">A4 preview — this is exactly what prints.</span>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px">
+          <input type="checkbox" id="optBars" checked> Tolerance bars
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px">
+          <input type="checkbox" id="optDraft" checked> Draft mark
+        </label>
+      </div>
+      <div class="sheet-frame">
+        <div class="sheet-fit" id="sheetFit">
+          <div class="sheet" id="sheet"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<dialog id="dlgPaste">
+  <form method="dialog">
+    <div class="dlg-head"><h2>Paste measured data</h2></div>
+    <div class="dlg-body">
+      <p>Paste rows copied from CALYPSO, PC-DMIS, Modus, a CSV or a spreadsheet. Tab or comma separated, one characteristic per line:</p>
+      <p><code style="font-family:var(--mono);font-size:12px">name , nominal , +tol , &minus;tol , measured [, measured&hellip;]</code></p>
+      <textarea id="pasteBox" spellcheck="false" placeholder="Diameter_Circle1	15.5900	0.0050	-0.0050	15.6100
+Length 01	3.1100	0.0050	-0.0050	3.0977"></textarea>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px">
+        <input type="checkbox" id="pasteReplace"> Replace existing characteristics
+      </label>
+    </div>
+    <div class="dlg-foot">
+      <span class="dlg-note" id="pasteNote">Header rows are skipped automatically.</span>
+      <button class="btn" value="cancel">Cancel</button>
+      <button class="btn btn-primary" id="btnPasteGo" value="go" type="button">Add rows</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgImport">
+  <form method="dialog">
+    <div class="dlg-head"><h2>Open a workspace file</h2></div>
+    <div class="dlg-body">
+      <p>Paste a previously saved <code style="font-family:var(--mono)">.json</code> workspace, or choose the file.</p>
+      <input type="file" id="importFile" accept="application/json,.json" style="margin-bottom:12px">
+      <textarea id="importBox" spellcheck="false" placeholder='{"company":{…},"report":{…},"chars":[…]}'></textarea>
+    </div>
+    <div class="dlg-foot">
+      <button class="btn" value="cancel">Cancel</button>
+      <button class="btn btn-primary" id="btnImportGo" value="go" type="button">Open</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgExport">
+  <form method="dialog">
+    <div class="dlg-head"><h2>Workspace file</h2></div>
+    <div class="dlg-body">
+      <p>Your company profile, this report and every characteristic. Keep it with the job folder — opening it restores the report exactly.</p>
+      <textarea id="exportBox" spellcheck="false" readonly></textarea>
+    </div>
+    <div class="dlg-foot">
+      <span class="dlg-note" id="exportNote"></span>
+      <button class="btn" value="close">Close</button>
+      <button class="btn" id="btnCopyJson" type="button">Copy</button>
+      <button class="btn btn-primary" id="btnDownloadJson" type="button">Download</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+/* ===========================================================================
+   Datum Report Studio
+   A white-label dimensional inspection report generator.
+
+   The whole app is this one file: no build step, no server. A tenant's
+   identity (name, address, logo, colour) lives in `state.company` and is
+   stamped on every sheet, which is what makes it a SaaS front end — swap the
+   company block and the same engine issues reports for anyone.
+
+   The parts worth reading are:
+     calc.*   the metrology maths (limits, deviation, guard bands, capability)
+     audit()  the pre-issue checks — the reason this beats a CMM printout
+     render*  pure functions from state to DOM
+=========================================================================== */
+(function(){
+'use strict';
+
+/* ---------------------------------------------------------------- helpers */
+const $  = id => document.getElementById(id);
+const el = (tag, cls, txt) => { const n = document.createElement(tag);
+  if (cls) n.className = cls; if (txt != null) n.textContent = txt; return n; };
+const esc = s => String(s == null ? '' : s)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+
+/** Parse to a finite number, or null. Blank, '-', 'n.def.' and junk all give null. */
+function num(v){
+  if (v === 0) return 0;
+  if (v == null) return null;
+  const s = String(v).replace(/,/g,'.').replace(/[^\d.eE+-]/g,'').trim();
+  if (!s || s === '-' || s === '+' || s === '.') return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Split "15.61, 15.60 15.62" into [15.61, 15.60, 15.62]. */
+function parseValues(raw){
+  if (raw == null) return [];
+  return String(raw).split(/[,;\s]+/).map(num).filter(v => v !== null);
+}
+
+/** Fixed-decimal display that keeps trailing zeros — metrology reads 3.1100, not 3.11. */
+const fx = (v, d) => (v === null || v === undefined || !Number.isFinite(v)) ? '' : v.toFixed(d);
+const signed = (v, d) => (v === null || !Number.isFinite(v)) ? '' : (v > 0 ? '+' : '') + v.toFixed(d);
+
+/* --------------------------------------------------------------- the maths */
+const calc = {
+  /** Upper and lower specification limits from nominal + asymmetric tolerances. */
+  limits(c){
+    const nom = num(c.nominal), up = num(c.upper), lo = num(c.lower);
+    if (nom === null) return { utl:null, ltl:null, band:null };
+    const utl = nom + (up === null ? 0 : up);
+    const ltl = nom + (lo === null ? 0 : lo);
+    return { utl:Math.max(utl,ltl), ltl:Math.min(utl,ltl), band:Math.abs(utl-ltl) };
+  },
+
+  deviation(measured, nominal){
+    const m = num(measured), n = num(nominal);
+    return (m === null || n === null) ? null : m - n;
+  },
+
+  /**
+   * ISO 14253-1 stringent acceptance.
+   *   pass         value sits inside the limits with the expanded uncertainty
+   *                subtracted from both ends (the guard band)
+   *   conditional  inside the limits, but the guard band means conformance
+   *                cannot be proven — the honest answer is "not decidable"
+   *   fail         outside the limits by more than the uncertainty
+   * With U = 0 this collapses to a plain limit check, which is what a CMM
+   * printout does today.
+   */
+  verdict(value, c){
+    const v = num(value);
+    if (v === null) return 'none';
+    const { utl, ltl } = calc.limits(c);
+    if (utl === null) return 'none';
+    const U = Math.abs(num(c.U) ?? 0);
+    if (v > utl + U || v < ltl - U) return 'fail';
+    if (v > utl - U || v < ltl + U) return U > 0 ? 'conditional' : 'fail';
+    return 'pass';
+  },
+
+  /** Signed distance outside the tolerance, 0 when inside. The CMM "+/-" column. */
+  outBy(value, c){
+    const v = num(value); const { utl, ltl } = calc.limits(c);
+    if (v === null || utl === null) return null;
+    if (v > utl) return v - utl;
+    if (v < ltl) return v - ltl;
+    return 0;
+  },
+
+  /** How much of the allowed deviation this value uses, as a percentage. */
+  pctOfTol(value, c){
+    const dev = calc.deviation(value, c.nominal);
+    if (dev === null) return null;
+    const up = Math.abs(num(c.upper) ?? 0), lo = Math.abs(num(c.lower) ?? 0);
+    const allowed = dev >= 0 ? up : lo;
+    if (!allowed) return dev === 0 ? 0 : null;
+    return dev / allowed * 100;
+  },
+
+  stats(values){
+    const v = values.filter(x => Number.isFinite(x));
+    const n = v.length;
+    if (!n) return { n:0 };
+    const mean = v.reduce((a,b) => a+b, 0) / n;
+    const min = Math.min(...v), max = Math.max(...v);
+    const sd = n > 1
+      ? Math.sqrt(v.reduce((a,b) => a + (b-mean)*(b-mean), 0) / (n-1))
+      : 0;
+    return { n, mean, min, max, range:max-min, sd };
+  },
+
+  /** Cp / Cpk. Needs n >= 2 and real spread; returns nulls otherwise. */
+  capability(values, c){
+    const s = calc.stats(values);
+    const { utl, ltl } = calc.limits(c);
+    if (s.n < 2 || !s.sd || utl === null || utl === ltl) return { cp:null, cpk:null, n:s.n };
+    const cp  = (utl - ltl) / (6 * s.sd);
+    const cpk = Math.min((utl - s.mean) / (3 * s.sd), (s.mean - ltl) / (3 * s.sd));
+    return { cp, cpk, n:s.n };
+  },
+
+  /** Thermal error for an uncompensated steel measurement, in mm. */
+  thermalError(lengthMM, tempC){
+    const t = num(tempC);
+    if (t === null || !Number.isFinite(lengthMM)) return null;
+    return 11.5e-6 * lengthMM * (t - 20);   // ISO 1 reference temperature is 20 °C
+  }
+};
+
+/* ----------------------------------------------------------- field schemas */
+const TYPES = [
+  ['diameter','Diameter'], ['radius','Radius'], ['length','Length / distance'],
+  ['angle','Angle'], ['position','Position'], ['roundness','Roundness'],
+  ['flatness','Flatness'], ['cylindricity','Cylindricity'], ['runout','Runout'],
+  ['profile','Profile'], ['concentricity','Concentricity'], ['thickness','Thickness'],
+  ['other','Other']
+];
+/** ISO 14405-1 size modifiers. A diameter means nothing without one. */
+const ASSOC = [
+  ['','—'], ['GG','GG Gauss (least squares)'], ['GX','GX minimum circumscribed'],
+  ['GN','GN minimum zone'], ['GI','GI maximum inscribed'], ['LP','LP two-point local'],
+  ['LS','LS least-squares local']
+];
+const UNITS = ['mm','µm','inch','deg'];
+
+const COMPANY_FIELDS = [
+  { k:'name',    label:'Company name',      w:1, ph:'Sample Metrology Lab' },
+  { k:'tagline', label:'Division / service', w:1, ph:'Dimensional Inspection Services' },
+  { k:'addr',    label:'Address',  type:'textarea', wide:true, ph:'Unit 4, Industrial Estate\nCity — PIN' },
+  { k:'phone',   label:'Phone' },
+  { k:'email',   label:'Email' },
+  { k:'web',     label:'Website' },
+  { k:'gstin',   label:'GSTIN / company reg. no' },
+  { k:'accred',  label:'Accreditation', hint:'e.g. ISO/IEC 17025 certificate number' },
+  { k:'footer',  label:'Footer line', wide:true, hint:'Printed at the foot of every page' }
+];
+
+const PART_FIELDS = [
+  { k:'partDesc',   label:'Part description', wide:true },
+  { k:'partNo',     label:'Part number' },
+  { k:'drawingNo',  label:'Drawing number' },
+  { k:'drawingRev', label:'Drawing revision', hint:'Required — a report against an unstated revision proves nothing' },
+  { k:'customer',   label:'Customer' },
+  { k:'po',         label:'PO / work order' },
+  { k:'lot',        label:'Lot / batch' },
+  { k:'serial',     label:'Serial / part ID' },
+  { k:'lotQty',     label:'Lot quantity', type:'number' },
+  { k:'sampleSize', label:'Pieces inspected', type:'number', hint:'Must match the number of measured values per row' },
+  { k:'material',   label:'Material' },
+  { k:'process',    label:'Process / operation' }
+];
+
+const EQUIP_FIELDS = [
+  { k:'machineName',   label:'Equipment', hint:'e.g. CMM, height gauge, profile projector' },
+  { k:'machineModel',  label:'Make / model' },
+  { k:'machineSerial', label:'Serial number' },
+  { k:'software',      label:'Software / version' },
+  { k:'calCert',       label:'Calibration certificate no' },
+  { k:'calDue',        label:'Calibration due', type:'date' },
+  { k:'probeQual',     label:'Probe / stylus qualified', type:'date' },
+  { k:'mpe',           label:'MPEₑ (µm)', hint:'From ISO 10360-2, e.g. 1.9 + L/350' },
+  { k:'tempC',         label:'Ambient temperature (°C)', type:'number', step:'0.1' },
+  { k:'humidity',      label:'Relative humidity (%)', type:'number' },
+  { k:'tempComp',      label:'Temperature compensated to 20 °C', type:'checkbox', wide:true },
+  { k:'method',        label:'Method / procedure reference', wide:true }
+];
+
+const DOC_FIELDS = [
+  { k:'reportNo',  label:'Report number' },
+  { k:'reportRev', label:'Report revision' },
+  { k:'date',      label:'Inspection date & time', type:'datetime-local' },
+  { k:'kind',      label:'Inspection type', type:'select',
+    options:['First article','In-process','Final inspection','PPAP / ISIR','Layout','Incoming','Re-inspection'] },
+  { k:'inspector', label:'Inspected by', hint:'A person, not a shared login' },
+  { k:'approver',  label:'Approved by' },
+  { k:'defaultU',  label:'Default U (k=2), mm', type:'number', step:'0.0001',
+    hint:'Applied to rows with no uncertainty of their own' },
+  { k:'rule',      label:'Decision rule', type:'select',
+    options:['Simple acceptance (ISO 14253-1, U not applied)',
+             'Stringent acceptance (ISO 14253-1, guard band = U)'] },
+  { k:'notes',     label:'Notes / observations', type:'textarea', wide:true }
+];
+
+const ACCENTS = ['#003393','#0f4c81','#1b6f47','#7a1f2b','#2b3a45','#5a3e85','#a8541b','#14181d'];
+
+/* -------------------------------------------------------------- the state */
+const BLANK_COMPANY = { name:'', tagline:'', addr:'', phone:'', email:'', web:'',
+  gstin:'', accred:'', footer:'', logo:null, accent:'#003393' };
+
+function demoState(){
+  /* The seeded example is a real CMM printout, warts intact: no equipment
+     named, no calibration, a shared "Master" login, blank drawing revision,
+     unnamed sections and a blanket ±0.005 on features that cannot hold it.
+     The audit panel finds all of it — which is the point of the demo. */
+  const t = (name, group, nominal, measured, kind, assoc) =>
+    ({ id:uid(), kind:'char', balloon:'', name, group, type:kind, assoc, unit:'mm',
+       nominal, upper:'0.0050', lower:'-0.0050', U:'', values:measured });
+  return {
+    company: Object.assign({}, BLANK_COMPANY, {
+      name:'Sample Metrology Lab',
+      tagline:'Dimensional Inspection Services',
+      addr:'Plot 12, Phase II Industrial Estate\nChennai 600 050',
+      phone:'+91 00000 00000',
+      email:'reports@example.com',
+      footer:'Results relate only to the items measured. This report may not be reproduced except in full.'
+    }),
+    report: {
+      partDesc:'REED TUBE BULGE', partNo:'S-11445', drawingNo:'S-11445', drawingRev:'',
+      customer:'', po:'', lot:'', serial:'01', lotQty:'', sampleSize:'1',
+      material:'', process:'Tube bulge',
+      machineName:'', machineModel:'', machineSerial:'', software:'CALYPSO 7.4.0404',
+      calCert:'', calDue:'', probeQual:'', mpe:'', tempC:'', humidity:'',
+      tempComp:false, method:'',
+      reportNo:'', reportRev:'', date:'2026-09-12T18:08', kind:'Final inspection',
+      inspector:'Master', approver:'', defaultU:'',
+      rule:'Simple acceptance (ISO 14253-1, U not applied)', notes:''
+    },
+    chars: [
+      { id:uid(), kind:'group', name:'--' },
+      t('Diameter_Circle1','--','15.5900','15.6100','diameter','GG'),
+      t('Diameter_Circle2','--','11.8900','11.8888','diameter','GG'),
+      t('Length 01','--','3.1100','3.0977','length',''),
+      t('Length 02','--','3.1100','3.0979','length',''),
+      { id:uid(), kind:'group', name:'-' },
+      t('Diameter_Circle3','-','16.0100','16.0384','diameter','GG'),
+      t('Diameter_Circle4','-','12.1100','12.1074','diameter','GG'),
+      t('Length 1','-','2.8900','2.8736','length',''),
+      t('Length 2','-','2.8900','2.8722','length','')
+    ],
+    ui: { tab:'chars', view:'editor', bars:true, draft:true, demo:true }
+  };
+}
+
+let uidN = 0;
+function uid(){ return 'c' + (++uidN) + Math.random().toString(36).slice(2,6); }
+
+let state = demoState();
+
+/* ------------------------------------------------------------- persistence */
+const KEY = 'datum.workspace.v1';
+function save(){
+  try { localStorage.setItem(KEY, JSON.stringify(state)); }
+  catch (e) { /* private window, blocked storage — the app still works */ }
+}
+function load(){
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.company || !Array.isArray(parsed.chars)) return false;
+    state = migrate(parsed);
+    return true;
+  } catch (e) { return false; }
+}
+/** Accept any older or hand-edited file without throwing. */
+function migrate(p){
+  const s = demoState();
+  s.company = Object.assign({}, BLANK_COMPANY, p.company || {});
+  s.report  = Object.assign({}, s.report, p.report || {});
+  s.ui      = Object.assign({}, s.ui, p.ui || {}, { demo:false });
+  s.chars   = (p.chars || []).map(c => Object.assign(
+    { id:uid(), kind:'char', balloon:'', name:'', group:'', type:'other',
+      assoc:'', unit:'mm', nominal:'', upper:'', lower:'', U:'', values:'' },
+    c, { id:c.id || uid() }));
+  if (!s.chars.length) s.chars = [newChar()];
+  return s;
+}
+function newChar(){
+  return { id:uid(), kind:'char', balloon:'', name:'', group:'', type:'length',
+           assoc:'', unit:'mm', nominal:'', upper:'0.05', lower:'-0.05', U:'', values:'' };
+}
+
+/* =========================================================================
+   AUDIT — the pre-issue checks
+   Each finding is { sev, title, detail, fix }. `sev` is 'block' (the report
+   is not defensible until fixed), 'warn' (a reviewer will ask) or 'note'.
+   ========================================================================= */
+const GENERIC_LOGINS = ['master','admin','administrator','operator','user','cmm','test','demo','qc','inspector'];
+
+function audit(s){
+  const out = [];
+  const r = s.report, co = s.company;
+  const chars = s.chars.filter(c => c.kind === 'char');
+  const add = (sev, title, detail, fix) => out.push({ sev, title, detail, fix });
+
+  /* --- identity of the thing measured --- */
+  if (!String(r.drawingRev || '').trim())
+    add('block','Drawing revision is blank',
+      'The results are stated against drawing ' + (r.drawingNo || '(unnumbered)') +
+      ' but not against a revision of it. If the drawing has changed since, nothing here can be re-verified.',
+      'Enter the revision shown in the drawing title block.');
+  if (!String(r.drawingNo || '').trim())
+    add('block','No drawing number','Nothing ties these measurements to a controlled document.','Report details → Drawing number.');
+  if (!String(r.partDesc || '').trim() && !String(r.partNo || '').trim())
+    add('block','Part not identified','Neither a description nor a part number is given.','Report details → Part & order.');
+  if (!String(r.reportNo || '').trim())
+    add('warn','Report has no number','An unnumbered report cannot be indexed, superseded or recalled.','Report details → Report number.');
+  if (!String(r.customer || '').trim())
+    add('note','No customer named','Useful when the same part is supplied to more than one buyer.','Report details → Customer.');
+
+  /* --- equipment and traceability (ISO/IEC 17025 §7.8.2) --- */
+  if (!String(r.machineName || '').trim() && !String(r.machineSerial || '').trim())
+    add('block','Measuring equipment not identified',
+      'No instrument, model or serial number is recorded, so the measurement cannot be traced to a calibrated device.',
+      'Equipment & conditions → Equipment, make/model and serial number.');
+  else if (!String(r.machineSerial || '').trim())
+    add('warn','Equipment serial number missing',
+      'The instrument type is named but not the individual device.','Equipment & conditions → Serial number.');
+  if (!String(r.calCert || '').trim())
+    add('warn','No calibration certificate referenced',
+      'Traceability to a national standard is asserted by reference, not assumed.','Equipment & conditions → Calibration certificate no.');
+  if (!r.calDue) {
+    add('warn','Calibration due date not recorded','Nothing shows the equipment was in calibration on the day of measurement.','Equipment & conditions → Calibration due.');
+  } else {
+    const due = new Date(r.calDue + 'T23:59'), when = r.date ? new Date(r.date) : new Date();
+    if (Number.isFinite(due.getTime()) && Number.isFinite(when.getTime()) && due < when)
+      add('block','Equipment was out of calibration',
+        'Calibration expired ' + r.calDue + ', before the inspection on ' + fmtDate(r.date) + '. Results taken on uncalibrated equipment are not valid.',
+        'Recalibrate and re-measure, or correct the date.');
+  }
+  if (!r.probeQual)
+    add('note','Probe / stylus qualification date not recorded',
+      'On a CMM, stylus qualification drift shows up directly in diameters.','Equipment & conditions → Probe / stylus qualified.');
+
+  /* --- environment --- */
+  const tempC = num(r.tempC);
+  if (tempC === null) {
+    add('warn','No temperature record',
+      'ISO 1 fixes the reference temperature for dimensional measurement at 20 °C. Without a record there is no way to judge thermal error.',
+      'Equipment & conditions → Ambient temperature.');
+  } else if (Math.abs(tempC - 20) > 1 && !r.tempComp) {
+    const big = Math.max.apply(null, chars.map(c => Math.abs(num(c.nominal) ?? 0)).concat([0]));
+    const err = calc.thermalError(big, tempC);
+    const tight = tightestBand(chars);
+    let d = 'Measured at ' + tempC + ' °C without compensation. On steel, the largest nominal here (' +
+            fx(big,2) + ' mm) shifts about ' + fx(Math.abs(err) * 1000, 1) + ' µm from the 20 °C reference.';
+    if (tight) d += ' The tightest tolerance band on this report is ' + fx(tight * 1000, 1) + ' µm.';
+    add(Math.abs(err) * 2 > (tight || Infinity) ? 'block' : 'warn', 'Thermal error is not accounted for', d,
+      'Compensate to 20 °C, or state the uncorrected temperature and its contribution to uncertainty.');
+  }
+
+  /* --- decision rule and uncertainty --- */
+  const anyU = chars.some(c => num(c.U) !== null) || num(r.defaultU) !== null;
+  if (!anyU) {
+    add('block','Conformance stated without a measurement uncertainty',
+      'Every row is called pass or fail on the measured number alone. ISO 14253-1 requires a stated decision rule and, for stringent acceptance, a guard band of U. Values near a limit are being declared conforming when they cannot be.',
+      'Report details → Default U (k=2), or a per-row U in the Characteristics table.');
+  } else {
+    chars.forEach(c => {
+      const U = Math.abs(num(c.U) ?? num(r.defaultU) ?? 0);
+      const { band } = calc.limits(c);
+      if (U && band && band < 4 * U)
+        add('warn','Uncertainty consumes the tolerance on “' + (c.name || 'unnamed') + '”',
+          'U = ' + fx(U * 1000,1) + ' µm against a ' + fx(band * 1000,1) +
+          ' µm band — ' + Math.round(200 * U / band) + '% of the tolerance. Below a 4:1 ratio the instrument cannot resolve conformance.',
+          'Use a more capable instrument, or agree a wider tolerance with the customer.');
+    });
+  }
+
+  /* --- the characteristics themselves --- */
+  if (!chars.length) {
+    add('block','No characteristics','The report has nothing to say.','Characteristics → Add characteristic.');
+  }
+  const noValues = chars.filter(c => !parseValues(c.values).length);
+  if (noValues.length)
+    add('block', noValues.length + ' characteristic' + (noValues.length > 1 ? 's have' : ' has') + ' no measured value',
+      'Listed but never measured: ' + noValues.map(c => c.name || 'unnamed').join(', ') + '.',
+      'Enter a value or delete the row.');
+
+  const noNominal = chars.filter(c => num(c.nominal) === null);
+  if (noNominal.length)
+    add('block', noNominal.length + ' characteristic' + (noNominal.length > 1 ? 's have' : ' has') + ' no nominal',
+      'Without a nominal there is no deviation to report.', 'Enter the drawing dimension.');
+
+  /* duplicate and near-duplicate names */
+  const seen = {}, dups = [], nearKeys = {};
+  chars.forEach(c => {
+    const n = String(c.name || '').trim().toLowerCase();
+    if (!n) return;
+    if (seen[n]) { if (dups.indexOf(n) < 0) dups.push(n); } else seen[n] = 1;
+    const k = n.replace(/\s+/g,'').replace(/0+(\d)/g,'$1');   // "length 01" and "Length 1" collapse
+    (nearKeys[k] = nearKeys[k] || []).push(String(c.name).trim());
+  });
+  if (dups.length)
+    add('block','Duplicate characteristic names',
+      'More than one row is called ' + dups.map(d => '“' + d + '”').join(', ') +
+      '. A reader cannot tell which feature a result belongs to.',
+      'Give each row a unique name, or a balloon number.');
+  Object.keys(nearKeys).forEach(k => {
+    const names = nearKeys[k].filter((v,i,a) => a.indexOf(v) === i);
+    if (names.length > 1)
+      add('warn','Ambiguous names: ' + names.map(n => '“' + n + '”').join(' and '),
+        'These differ only by zero padding or spacing. On a printed report they read as the same characteristic.',
+        'Rename them after the feature they measure, e.g. “Wall thickness — bulge end”.');
+  });
+
+  /* balloons */
+  if (chars.length && !chars.some(c => String(c.balloon || '').trim()))
+    add('warn','Characteristics are not ballooned',
+      'Nothing maps a row back to a specific dimension on the drawing. Every PPAP and AS9102 layout requires it.',
+      'Number the drawing and put the balloon number in the Bln column.');
+
+  /* blanket tolerance */
+  const bands = chars.map(c => { const l = calc.limits(c); return l.band; }).filter(b => b !== null && b > 0);
+  const kinds = chars.map(c => c.type).filter((v,i,a) => a.indexOf(v) === i);
+  if (bands.length >= 4 && kinds.length > 1) {
+    const first = bands[0];
+    if (bands.every(b => Math.abs(b - first) < 1e-9))
+      add('warn','One tolerance applied to every characteristic',
+        'All ' + bands.length + ' rows carry a ' + fx(first * 1000,1) +
+        ' µm band across ' + kinds.length + ' different feature types. Identical tolerances on dissimilar features are the signature of a default setting, not of a drawing.',
+        'Transcribe each tolerance from the drawing, including general-tolerance classes such as ISO 2768.');
+  }
+
+  /* association method on size features */
+  const sizeNoAssoc = chars.filter(c => (c.type === 'diameter' || c.type === 'radius') && !c.assoc);
+  if (sizeNoAssoc.length)
+    add('note','Size features with no association method',
+      sizeNoAssoc.length + ' diameter/radius row' + (sizeNoAssoc.length > 1 ? 's do' : ' does') +
+      ' not say how the substitute feature was fitted. On a formed or out-of-round feature a least-squares diameter and a minimum-circumscribed diameter are different numbers.',
+      'Set the ISO 14405-1 modifier (GG, GX, GN, LP…) in the Assoc. column.');
+
+  /* form left unreported next to size */
+  const hasRoundFeature = chars.some(c => c.type === 'diameter');
+  const hasForm = chars.some(c => ['roundness','cylindricity','flatness','profile','runout'].indexOf(c.type) >= 0);
+  if (hasRoundFeature && !hasForm)
+    add('note','Diameters reported without any form characteristic',
+      'Size is reported but roundness, cylindricity and runout are not. On a formed, drawn or bulged feature the form error is usually what fails in assembly.',
+      'Add the form characteristics the drawing calls for.');
+
+  /* unnamed section headings */
+  s.chars.filter(c => c.kind === 'group').forEach(g => {
+    const n = String(g.name || '').trim();
+    if (!n || /^[-–—_.\s]+$/.test(n))
+      add('warn','Unnamed section heading',
+        'A section is printed as “' + (n || '(blank)') + '”, which tells the reader nothing about which part of the component it covers.',
+        'Name the section, e.g. “Section A — bulge end”.');
+  });
+
+  /* sample size vs values entered */
+  const counts = chars.map(c => parseValues(c.values).length).filter(n => n > 0);
+  const uniqueCounts = counts.filter((v,i,a) => a.indexOf(v) === i);
+  if (uniqueCounts.length > 1)
+    add('warn','Different numbers of pieces per characteristic',
+      'Rows carry ' + uniqueCounts.sort((a,b)=>a-b).join(', ') + ' measured values. Statistics across the report are not comparable.',
+      'Measure every characteristic on every piece, or split into separate reports.');
+  const declared = num(r.sampleSize);
+  if (declared !== null && counts.length && declared !== counts[0])
+    add('warn','Pieces inspected does not match the data',
+      'The header declares ' + declared + ' piece(s) but the rows carry ' + counts[0] + ' measured value(s).',
+      'Correct the declared sample size, or add the missing values.');
+
+  /* people */
+  const insp = String(r.inspector || '').trim();
+  if (!insp) add('block','No inspector named','An unsigned result has no owner.','Report details → Inspected by.');
+  else if (GENERIC_LOGINS.indexOf(insp.toLowerCase()) >= 0)
+    add('block','Inspector is a shared login',
+      '“' + insp + '” is a generic account, not a person. Accountability for the result is lost, and an auditor will raise it.',
+      'Record the name of the person who took the measurements.');
+  if (!String(r.approver || '').trim())
+    add('warn','No independent approval',
+      'Nobody other than the inspector has released this report.','Report details → Approved by.');
+
+  /* dates */
+  if (!r.date) {
+    add('block','No inspection date','Results with no date cannot be tied to a lot or a process window.','Report details → Inspection date & time.');
+  } else if (new Date(r.date) > new Date(Date.now() + 864e5)) {
+    add('warn','Inspection date is in the future','Check the date and the clock on the measuring machine.','Report details → Inspection date & time.');
+  }
+
+  /* company block */
+  if (!String(co.name || '').trim())
+    add('block','No issuing organisation','The report does not say who produced it.','Company → Company name.');
+  if (!co.logo)
+    add('note','No logo uploaded','The report prints with a placeholder in the letterhead.','Company → Upload logo.');
+  if (!String(co.accred || '').trim())
+    add('note','No accreditation or scope reference',
+      'If the work is done under an accredited scope, say so; if it is not, saying nothing invites the assumption that it is.',
+      'Company → Accreditation.');
+
+  const order = { block:0, warn:1, note:2 };
+  return out.sort((a,b) => order[a.sev] - order[b.sev]);
+}
+
+function tightestBand(chars){
+  const bands = chars.map(c => calc.limits(c).band).filter(b => b !== null && b > 0);
+  return bands.length ? Math.min.apply(null, bands) : null;
+}
+
+/* ======================================================================== */
+/*  RENDER — editor                                                          */
+/* ======================================================================== */
+
+function buildField(f, scope){
+  const wrap = el('div', 'field' + (f.wide ? ' wide' : '') +
+    (f.type === 'checkbox' ? ' field-check' : '') +
+    (f.type === 'number' ? ' num' : ''));
+  const id = scope + '_' + f.k;
+  let input;
+  if (f.type === 'textarea') { input = el('textarea'); input.rows = f.k === 'addr' ? 3 : 2; }
+  else if (f.type === 'select') {
+    input = el('select');
+    (f.options || []).forEach(o => { const op = el('option', null, o); op.value = o; input.appendChild(op); });
+  } else {
+    input = el('input');
+    input.type = f.type || 'text';
+    if (f.step) input.step = f.step;
+    if (f.ph) input.placeholder = f.ph;
+  }
+  input.id = id;
+  input.dataset.scope = scope;
+  input.dataset.key = f.k;
+
+  const label = el('label', null, f.label);
+  label.htmlFor = id;
+
+  if (f.type === 'checkbox') { wrap.appendChild(input); wrap.appendChild(label); }
+  else {
+    wrap.appendChild(label);
+    wrap.appendChild(input);
+    if (f.hint) wrap.appendChild(el('span', 'hint', f.hint));
+  }
+  return wrap;
+}
+
+function buildForms(){
+  const mount = (node, fields, scope) => {
+    node.innerHTML = '';
+    fields.forEach(f => node.appendChild(buildField(f, scope)));
+  };
+  mount($('companyFields'), COMPANY_FIELDS, 'company');
+  mount($('fieldsPart'),  PART_FIELDS,  'report');
+  mount($('fieldsEquip'), EQUIP_FIELDS, 'report');
+  mount($('fieldsDoc'),   DOC_FIELDS,   'report');
+
+  const sw = $('accentSwatches');
+  ACCENTS.forEach(hex => {
+    const b = el('button', 'swatch');
+    b.type = 'button'; b.style.background = hex; b.dataset.accent = hex;
+    b.title = hex; b.setAttribute('aria-label', 'Header colour ' + hex);
+    sw.appendChild(b);
+  });
+}
+
+function syncForms(){
+  document.querySelectorAll('[data-scope][data-key]').forEach(inp => {
+    const v = state[inp.dataset.scope][inp.dataset.key];
+    if (inp.type === 'checkbox') inp.checked = !!v;
+    else inp.value = v == null ? '' : v;
+  });
+  document.querySelectorAll('.swatch').forEach(b =>
+    b.setAttribute('aria-pressed', b.dataset.accent === state.company.accent ? 'true' : 'false'));
+  $('accentPick').value = state.company.accent || '#003393';
+
+  const well = $('logoWell');
+  well.innerHTML = '';
+  if (state.company.logo) {
+    const img = el('img'); img.src = state.company.logo; img.alt = 'Company logo';
+    well.appendChild(img);
+  } else well.appendChild(el('span', null, 'No logo yet'));
+}
+
+const ICONS = {
+  up:'<path d="M12 19V5M5 12l7-7 7 7"/>',
+  down:'<path d="M12 5v14M19 12l-7 7-7-7"/>',
+  copy:'<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
+  del:'<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'
+};
+function iconBtn(kind, title, fn){
+  const b = el('button'); b.type = 'button'; b.title = title; b.setAttribute('aria-label', title);
+  b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+                'stroke-linecap="round" stroke-linejoin="round">' + ICONS[kind] + '</svg>';
+  b.addEventListener('click', fn);
+  return b;
+}
+
+function renderChars(){
+  const body = $('charRows');
+  body.innerHTML = '';
+  let currentGroup = '';
+
+  state.chars.forEach((c, i) => {
+    const tr = el('tr');
+    tr.dataset.id = c.id;
+
+    if (c.kind === 'group') {
+      currentGroup = c.name;
+      tr.className = 'group-row';
+      const td = el('td'); td.colSpan = 10;
+      const inp = el('input');
+      inp.value = c.name || '';
+      inp.placeholder = 'Section heading — e.g. Section A, bulge end';
+      inp.addEventListener('input', () => { c.name = inp.value; reGroup(); touch(); });
+      td.appendChild(inp);
+      tr.appendChild(td);
+      tr.appendChild(toolCell(i));
+      body.appendChild(tr);
+      return;
+    }
+
+    c.group = currentGroup;
+    const cell = (child, cls) => { const td = el('td', cls); td.appendChild(child); tr.appendChild(td); return td; };
+    const txt = (key, cls, ph) => {
+      const inp = el('input');
+      inp.value = c[key] == null ? '' : c[key];
+      if (cls) inp.className = cls;
+      if (ph) inp.placeholder = ph;
+      inp.addEventListener('input', () => { c[key] = inp.value; touch(); });
+      return inp;
+    };
+    const sel = (key, opts) => {
+      const s = el('select');
+      opts.forEach(([v, label]) => { const o = el('option', null, label); o.value = v; s.appendChild(o); });
+      s.value = c[key] || '';
+      s.addEventListener('change', () => { c[key] = s.value; touch(); });
+      return s;
+    };
+
+    cell(txt('balloon', 'n', '—'));
+    cell(txt('name', null, 'Characteristic'));
+    cell(sel('type', TYPES));
+    cell(sel('assoc', ASSOC));
+    cell(txt('nominal', 'n', '0.0000'));
+    cell(txt('upper', 'n', '+0.000'));
+    cell(txt('lower', 'n', '-0.000'));
+    cell(txt('U', 'n', '—'));
+    cell(txt('values', 'n', '0.0000, …'));
+
+    const values = parseValues(c.values);
+    const worst = worstVerdict(c, values);
+    const vd = el('span', 'verdict-cell ' + ({ pass:'v-pass', conditional:'v-cond', fail:'v-fail', none:'v-none' })[worst],
+      ({ pass:'PASS', conditional:'CHECK', fail:'FAIL', none:'—' })[worst]);
+    cell(vd, 'c');
+
+    tr.appendChild(toolCell(i));
+    body.appendChild(tr);
+  });
+
+  if (!state.chars.length) {
+    const tr = el('tr'), td = el('td');
+    td.colSpan = 11;
+    td.style.cssText = 'padding:22px 0;color:var(--ink-faint);text-align:center';
+    td.textContent = 'No characteristics yet — add one, or paste a table from your CMM.';
+    tr.appendChild(td); body.appendChild(tr);
+  }
+}
+
+function toolCell(i){
+  const td = el('td');
+  const box = el('div', 'rowtools');
+  box.appendChild(iconBtn('up', 'Move up', () => { move(i, -1); }));
+  box.appendChild(iconBtn('down', 'Move down', () => { move(i, 1); }));
+  box.appendChild(iconBtn('copy', 'Duplicate', () => {
+    const copy = Object.assign({}, state.chars[i], { id:uid() });
+    state.chars.splice(i + 1, 0, copy); touch(true);
+  }));
+  box.appendChild(iconBtn('del', 'Delete', () => { state.chars.splice(i, 1); touch(true); }));
+  td.appendChild(box);
+  return td;
+}
+function move(i, d){
+  const j = i + d;
+  if (j < 0 || j >= state.chars.length) return;
+  const [row] = state.chars.splice(i, 1);
+  state.chars.splice(j, 0, row);
+  touch(true);
+}
+function reGroup(){
+  let g = '';
+  state.chars.forEach(c => { if (c.kind === 'group') g = c.name; else c.group = g; });
+}
+function worstVerdict(c, values){
+  if (!values.length) return 'none';
+  const rank = { pass:0, conditional:1, fail:2, none:0 };
+  return values.reduce((acc, v) => {
+    const r = calc.verdict(v, effective(c));
+    return rank[r] > rank[acc] ? r : acc;
+  }, 'pass');
+}
+/** A row's own U, falling back to the report default, and only when the
+    decision rule actually applies a guard band. */
+function effective(c){
+  const stringent = /stringent/i.test(state.report.rule || '');
+  const U = stringent ? (num(c.U) ?? num(state.report.defaultU) ?? 0) : 0;
+  return { nominal:c.nominal, upper:c.upper, lower:c.lower, U:U };
+}
+
+/* ------------------------------------------------------------ render audit */
+function renderAudit(){
+  const findings = audit(state);
+  const counts = { block:0, warn:0, note:0 };
+  findings.forEach(f => counts[f.sev]++);
+
+  const badge = $('auditCount');
+  badge.textContent = String(findings.length);
+  badge.dataset.zero = counts.block ? '0' : '1';
+
+  const sum = $('auditSummary');
+  sum.innerHTML = '';
+  [['block','Blocking', counts.block, 'fail'],
+   ['warn','Reviewer will ask', counts.warn, 'warn'],
+   ['note','Worth doing', counts.note, 'pass']].forEach(([, label, n, tone]) => {
+    const d = el('div', 'audit-stat');
+    d.dataset.tone = n ? tone : '';
+    d.appendChild(el('b', null, String(n)));
+    d.appendChild(el('span', null, label));
+    sum.appendChild(d);
+  });
+
+  const list = $('auditList');
+  list.innerHTML = '';
+  if (!findings.length) {
+    const ok = el('div', 'clean');
+    ok.textContent = 'Nothing outstanding. This report carries everything a customer or an auditor needs to re-verify it.';
+    list.appendChild(ok);
+    return;
+  }
+  findings.forEach(f => {
+    const row = el('div', 'finding');
+    const sev = el('span', 'finding-sev ' +
+      ({ block:'sev-block', warn:'sev-warn', note:'sev-note' })[f.sev],
+      ({ block:'BLOCKING', warn:'REVIEW', note:'NOTE' })[f.sev]);
+    const body = el('div');
+    body.appendChild(el('h3', null, f.title));
+    body.appendChild(el('p', null, f.detail));
+    if (f.fix) body.appendChild(el('p', 'fix', 'Fix: ' + f.fix));
+    row.appendChild(sev); row.appendChild(body);
+    list.appendChild(row);
+  });
+}
+
+/* ======================================================================== */
+/*  RENDER — the sheet                                                       */
+/* ======================================================================== */
+
+function fmtDate(v){
+  if (!v) return '';
+  const d = new Date(v);
+  if (!Number.isFinite(d.getTime())) return String(v);
+  const p = n => String(n).padStart(2, '0');
+  const stamp = d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate());
+  return String(v).indexOf('T') > 0 ? stamp + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) : stamp;
+}
+
+/** Decimals to print: enough to show the tolerance, never fewer than 3. */
+function decimalsFor(c){
+  const cand = [c.nominal, c.upper, c.lower, c.U].map(v => {
+    const s = String(v == null ? '' : v);
+    const dot = s.indexOf('.');
+    return dot < 0 ? 0 : s.length - dot - 1;
+  });
+  return Math.min(6, Math.max(3, Math.max.apply(null, cand.concat([0]))));
+}
+
+/**
+ * Tolerance bar, drawn to scale.
+ * The window spans three tolerance bands so a value just outside the limit is
+ * visibly outside. Ticks sit on LTL, nominal and UTL — every drawn mark is a
+ * real value. Anything past the window is shown as an arrow at the edge.
+ */
+function barSVG(c, value, verdict){
+  const W = 120, H = 22, mid = H / 2;
+  const { utl, ltl } = calc.limits(c);
+  const v = num(value), nom = num(c.nominal);
+  if (utl === null || v === null) return '';
+  const band = Math.max(utl - ltl, 1e-9);
+  const span = band * 3;
+  const c0 = (utl + ltl) / 2;
+  const lo = c0 - span / 2;
+  const x = val => Math.max(0, Math.min(W, (val - lo) / span * W));
+  const U = Math.abs(num(c.U) ?? 0);
+  const col = { pass:'#14663f', conditional:'#7d5800', fail:'#9c201a', none:'#7b8695' }[verdict];
+
+  let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' +
+    esc('Limits ' + fx(ltl,4) + ' to ' + fx(utl,4) + ', measured ' + fx(v,4)) + '">';
+  s += '<rect x="0" y="' + (mid-4) + '" width="' + W + '" height="8" fill="#edf0f4"/>';
+  s += '<rect x="' + x(ltl) + '" y="' + (mid-4) + '" width="' + (x(utl)-x(ltl)) +
+       '" height="8" fill="#d3e0f2"/>';
+  if (U > 0) {
+    const gw = Math.min((x(ltl+U) - x(ltl)), (x(utl)-x(ltl))/2);
+    if (gw > 0.4) {
+      s += '<rect x="' + x(ltl) + '" y="' + (mid-4) + '" width="' + gw + '" height="8" fill="#b3c9e8"/>';
+      s += '<rect x="' + (x(utl)-gw) + '" y="' + (mid-4) + '" width="' + gw + '" height="8" fill="#b3c9e8"/>';
+    }
+  }
+  [ltl, utl].forEach(t => {
+    s += '<line x1="' + x(t) + '" y1="' + (mid-7) + '" x2="' + x(t) + '" y2="' + (mid+7) +
+         '" stroke="#5b6470" stroke-width="1"/>';
+  });
+  if (nom !== null)
+    s += '<line x1="' + x(nom) + '" y1="' + (mid-6) + '" x2="' + x(nom) + '" y2="' + (mid+6) +
+         '" stroke="#8d97a3" stroke-width=".8" stroke-dasharray="2 1.5"/>';
+
+  if (v < lo || v > span + lo) {
+    const right = v > lo + span;
+    const tipX = right ? W - 1 : 1, backX = right ? W - 9 : 9;
+    s += '<path d="M' + tipX + ' ' + mid + 'L' + backX + ' ' + (mid-5) + 'L' + backX + ' ' +
+         (mid+5) + 'Z" fill="' + col + '"/>';
+  } else {
+    s += '<line x1="' + x(v) + '" y1="' + (mid-8) + '" x2="' + x(v) + '" y2="' + (mid+8) +
+         '" stroke="' + col + '" stroke-width="1.4"/>';
+    s += '<circle cx="' + x(v) + '" cy="' + mid + '" r="3.2" fill="' + col + '"/>';
+  }
+  return s + '</svg>';
+}
+
+function renderSheet(){
+  const s = state, co = s.company, r = s.report;
+  const chars = s.chars.filter(c => c.kind === 'char');
+  const multi = chars.some(c => parseValues(c.values).length > 1);
+  const stringent = /stringent/i.test(r.rule || '');
+
+  /* ---- tally ---- */
+  const tally = { pass:0, conditional:0, fail:0, none:0 };
+  chars.forEach(c => tally[worstVerdict(c, parseValues(c.values))]++);
+  const decided = tally.pass + tally.conditional + tally.fail;
+  const conform = decided ? Math.round(tally.pass / decided * 100) : 0;
+
+  const accent = co.accent || '#003393';
+  const V = (label, value, mono) =>
+    '<div class="meta-row"><dt>' + esc(label) + '</dt><dd class="' +
+    (value ? (mono ? 'mono' : '') : 'blank') + '">' +
+    esc(value || 'not stated') + '</dd></div>';
+
+  /* ---- head ---- */
+  let h = '<div class="rpt-head">';
+  h += '<div class="rpt-logo">' + (co.logo
+      ? '<img src="' + esc(co.logo) + '" alt="">'
+      : '<div class="ph">your logo<br>here</div>') + '</div>';
+  h += '<div class="rpt-org">';
+  h += '<h1>' + esc(co.name || 'Company name') + '</h1>';
+  if (co.tagline) h += '<div class="tag">' + esc(co.tagline) + '</div>';
+  const contact = [co.phone, co.email, co.web].filter(Boolean).join('  ·  ');
+  h += '<div class="addr">' + esc(co.addr || '') + (contact ? '\n' + esc(contact) : '') +
+       (co.gstin ? '\nGSTIN ' + esc(co.gstin) : '') +
+       (co.accred ? '\n' + esc(co.accred) : '') + '</div>';
+  h += '</div>';
+  h += '<div class="rpt-title"><div class="t">Dimensional<br>Inspection Report</div>' +
+       '<div class="sub">' + esc(r.reportNo || 'REPORT No. —') +
+       (r.reportRev ? ' rev ' + esc(r.reportRev) : '') + '<br>' +
+       esc(r.kind || '') + '</div></div>';
+  h += '</div><div class="rule"></div>';
+
+  /* ---- meta ---- */
+  h += '<div class="meta">';
+  h += '<div class="meta-col"><h3>Item</h3>' +
+       V('Part description', r.partDesc) +
+       V('Part number', r.partNo, true) +
+       V('Drawing / revision', [r.drawingNo, r.drawingRev].filter(Boolean).join(' rev '), true) +
+       V('Customer', r.customer) +
+       V('PO / work order', r.po, true) +
+       V('Lot / serial', [r.lot, r.serial].filter(Boolean).join(' / '), true) +
+       (r.material ? V('Material', r.material) : '') +
+       '</div>';
+  h += '<div class="meta-col"><h3>Equipment</h3>' +
+       V('Equipment', [r.machineName, r.machineModel].filter(Boolean).join(' — ')) +
+       V('Serial no', r.machineSerial, true) +
+       V('Software', r.software) +
+       V('Calibration cert', r.calCert, true) +
+       V('Calibration due', r.calDue, true) +
+       V('Probe qualified', r.probeQual, true) +
+       (r.mpe ? V('MPEₑ', r.mpe, true) : '') +
+       '</div>';
+  const cond = num(r.tempC) !== null
+    ? num(r.tempC) + ' °C' + (r.humidity ? ' / ' + r.humidity + ' % RH' : '') +
+      (r.tempComp ? ' (compensated to 20 °C)' : ' (uncompensated)')
+    : '';
+  h += '<div class="meta-col"><h3>Record</h3>' +
+       V('Inspection date', fmtDate(r.date), true) +
+       V('Pieces inspected', r.sampleSize, true) +
+       V('Lot quantity', r.lotQty, true) +
+       V('Conditions', cond) +
+       V('Inspected by', r.inspector) +
+       V('Approved by', r.approver) +
+       (r.method ? V('Method', r.method) : '') +
+       '</div>';
+  h += '</div>';
+
+  /* ---- summary chips ---- */
+  h += '<div class="summary">';
+  h += '<div class="chip"><b>' + chars.length + '</b><span>characteristics</span></div>';
+  h += '<div class="chip" data-tone="pass"><b>' + tally.pass + '</b><span>within tolerance</span></div>';
+  if (tally.conditional)
+    h += '<div class="chip" data-tone="cond"><b>' + tally.conditional + '</b><span>not decidable</span></div>';
+  h += '<div class="chip" data-tone="fail"><b>' + tally.fail + '</b><span>out of tolerance</span></div>';
+  h += '<div class="chip"><b>' + conform + '%</b><span>conformance</span></div>';
+  h += '</div>';
+
+  /* ---- results table ---- */
+  h += '<table class="results"><thead><tr>' +
+       '<th class="l" style="width:8mm">Bln</th>' +
+       '<th class="l">Characteristic</th>' +
+       '<th>Nominal</th><th>+Tol</th><th>&minus;Tol</th>' +
+       (multi ? '<th>Mean</th><th>Min</th><th>Max</th>' : '<th>Measured</th>') +
+       '<th>Dev.</th><th>Out by</th><th>% tol</th>' +
+       (multi ? '<th>Cpk</th>' : '') +
+       (s.ui.bars ? '<th class="c">Position in tolerance</th>' : '') +
+       '<th class="c">Result</th></tr></thead><tbody>';
+
+  const colCount = 10 + (multi ? 3 : 0) + (s.ui.bars ? 1 : 0);
+
+  s.chars.forEach(c => {
+    if (c.kind === 'group') {
+      h += '<tr class="grp"><td colspan="' + colCount + '">' +
+           esc(c.name || '(unnamed section)') + '</td></tr>';
+      return;
+    }
+    const d = decimalsFor(c);
+    const values = parseValues(c.values);
+    const eff = effective(c);
+    const verdict = worstVerdict(c, values);
+    const st = calc.stats(values);
+    const rep = st.n ? (st.n > 1 ? st.mean : values[0]) : null;
+    const dev = calc.deviation(rep, c.nominal);
+    const out = rep === null ? null : calc.outBy(rep, eff);
+    const pct = rep === null ? null : calc.pctOfTol(rep, c);
+    const cap = multi ? calc.capability(values, eff) : null;
+    const devCls = verdict === 'fail' ? ' dev-fail' : verdict === 'conditional' ? ' dev-cond' : '';
+
+    const modifier = c.assoc ? c.assoc : '';
+    const kindLabel = (TYPES.find(t => t[0] === c.type) || ['',''])[1];
+
+    h += '<tr>';
+    h += '<td class="l bln">' + esc(c.balloon || '') + '</td>';
+    h += '<td class="l name">' + esc(c.name || '—') +
+         '<small>' + esc([kindLabel, modifier, c.unit].filter(Boolean).join(' · ')) + '</small></td>';
+    h += '<td>' + fx(num(c.nominal), d) + '</td>';
+    h += '<td>' + signed(num(c.upper), d) + '</td>';
+    h += '<td>' + signed(num(c.lower), d) + '</td>';
+    if (multi) {
+      h += '<td>' + fx(st.n ? st.mean : null, d) + '</td>';
+      h += '<td>' + fx(st.n ? st.min : null, d) + '</td>';
+      h += '<td>' + fx(st.n ? st.max : null, d) + '</td>';
+    } else {
+      h += '<td class="' + devCls.trim() + '">' + fx(rep, d) + '</td>';
+    }
+    h += '<td class="' + devCls.trim() + '">' + signed(dev, d) + '</td>';
+    h += '<td class="' + devCls.trim() + '">' + (out ? signed(out, d) : '') + '</td>';
+    h += '<td>' + (pct === null ? '' : Math.round(pct) + '%') + '</td>';
+    if (multi) h += '<td>' + (cap && cap.cpk !== null ? cap.cpk.toFixed(2) : '') + '</td>';
+    if (s.ui.bars) h += '<td class="bar-cell">' + barSVG(eff, rep, verdict) + '</td>';
+    h += '<td class="c"><span class="res res-' +
+         ({ pass:'pass', conditional:'cond', fail:'fail', none:'none' })[verdict] + '">' +
+         ({ pass:'PASS', conditional:'CHECK', fail:'FAIL', none:'—' })[verdict] + '</span></td>';
+    h += '</tr>';
+  });
+  h += '</tbody></table>';
+
+  /* ---- statement ---- */
+  const anyU = chars.some(c => num(c.U) !== null) || num(r.defaultU) !== null;
+  h += '<div class="statement"><h4>Conformance statement &amp; decision rule</h4>';
+  h += '<p>' + tally.pass + ' of ' + chars.length + ' characteristics conform to the stated limits' +
+       (tally.fail ? '; <b>' + tally.fail + ' do not</b>' : '') +
+       (tally.conditional ? '; ' + tally.conditional + ' cannot be decided within the measurement uncertainty' : '') + '.</p>';
+  if (stringent && anyU) {
+    h += '<p>Conformance decided by <b>stringent acceptance</b> per ISO 14253-1: a result is accepted only when it lies inside the specification limits by at least the expanded uncertainty <i>U</i> (k = 2, ≈ 95 % coverage). Results inside the limits but within <i>U</i> of one are reported as <b>CHECK</b> — neither conformance nor non-conformance is proven.</p>';
+  } else {
+    h += '<p>Conformance decided by <b>simple acceptance</b>: the measured value is compared directly with the specification limits and measurement uncertainty is not applied as a guard band. Results within <i>U</i> of a limit should be treated as undecided.</p>';
+  }
+  if (num(r.tempC) !== null)
+    h += '<p>Measured at ' + num(r.tempC) + ' °C' + (r.tempComp
+      ? ', corrected to the ISO 1 reference temperature of 20 °C.'
+      : '. Results are <b>not</b> corrected to the ISO 1 reference temperature of 20 °C.') + '</p>';
+  if (r.notes) h += '<p>' + esc(r.notes) + '</p>';
+  h += '</div>';
+
+  /* ---- sign-off ---- */
+  h += '<div class="signoff">';
+  h += '<div class="sign"><div class="role">Inspected by</div><div class="who">' +
+       esc(r.inspector || '') + '</div><div class="when">' + esc(fmtDate(r.date)) + '</div></div>';
+  h += '<div class="sign"><div class="role">Approved by</div><div class="who">' +
+       esc(r.approver || '') + '</div><div class="when">' + (r.approver ? esc(fmtDate(r.date)) : '') + '</div></div>';
+  h += '<div class="sign"><div class="role">Customer acceptance</div><div class="who"></div>' +
+       '<div class="when">date</div></div>';
+  h += '</div>';
+
+  /* ---- foot ---- */
+  h += '<div class="sheet-foot"><span>' + esc(co.footer || '') + '</span>' +
+       '<span class="mono">' + esc([co.name, r.reportNo, fmtDate(r.date)].filter(Boolean).join(' · ')) +
+       '</span></div>';
+
+  const blockers = audit(state).filter(f => f.sev === 'block').length;
+  if (s.ui.draft && blockers) h += '<div class="watermark">draft</div>';
+
+  const sheet = $('sheet');
+  sheet.style.setProperty('--org-color', accent);
+  sheet.innerHTML = h;
+  fitSheet();
+}
+
+/** Scale the A4 sheet down to whatever width the preview column has. */
+function fitSheet(){
+  const fit = $('sheetFit'), sheet = $('sheet');
+  if (!fit || !sheet) return;
+  const avail = fit.clientWidth;
+  const natural = sheet.offsetWidth || 1;
+  const k = Math.min(1, avail / natural);
+  sheet.style.transform = 'scale(' + k + ')';
+  fit.style.height = (sheet.offsetHeight * k) + 'px';
+}
+
+/* ======================================================================== */
+/*  wiring                                                                   */
+/* ======================================================================== */
+
+/** showModal() throws where modals are not permitted; a non-modal dialog still works. */
+function openDialog(d){
+  try { d.showModal(); }
+  catch (e) { try { d.show(); } catch (e2) { d.setAttribute('open',''); } }
+}
+/** confirm() is unavailable in some embeds — treat that as "yes, go ahead". */
+function ask(msg){ try { return confirm(msg); } catch (e) { return true; } }
+
+let toastTimer = null;
+function toast(msg){
+  const old = document.querySelector('.toast');
+  if (old) old.remove();
+  const t = el('div', 'toast', msg);
+  document.body.appendChild(t);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.remove(), 3200);
+}
+
+/** One entry point: recompute everything that depends on state. */
+function touch(rebuildRows){
+  if (rebuildRows) renderChars(); else refreshVerdicts();
+  renderAudit();
+  renderSheet();
+  save();
+}
+/** Cheap path — only the result pills in the editor change as you type. */
+function refreshVerdicts(){
+  const rows = $('charRows').children;
+  let k = 0;
+  state.chars.forEach(c => {
+    const tr = rows[k++];
+    if (!tr || c.kind === 'group') return;
+    const cell = tr.querySelector('.verdict-cell');
+    if (!cell) return;
+    const v = worstVerdict(c, parseValues(c.values));
+    cell.className = 'verdict-cell ' + ({ pass:'v-pass', conditional:'v-cond', fail:'v-fail', none:'v-none' })[v];
+    cell.textContent = ({ pass:'PASS', conditional:'CHECK', fail:'FAIL', none:'—' })[v];
+  });
+}
+
+function showTab(name){
+  state.ui.tab = name;
+  document.querySelectorAll('[data-panel]').forEach(p => { p.hidden = p.dataset.panel !== name; });
+  document.querySelectorAll('.tabs [role="tab"]').forEach(b =>
+    b.setAttribute('aria-selected', b.dataset.tab === name ? 'true' : 'false'));
+  save();
+}
+function showView(name){
+  state.ui.view = name;
+  $('work').dataset.mobile = name;
+  document.querySelectorAll('.viewswitch [role="tab"]').forEach(b =>
+    b.setAttribute('aria-selected', b.dataset.view === name ? 'true' : 'false'));
+  if (name === 'preview') fitSheet();
+}
+
+/** Shrink an uploaded logo so the workspace file stays small. */
+function readLogo(file){
+  const fr = new FileReader();
+  fr.onload = () => {
+    const dataURI = String(fr.result);
+    if (file.type === 'image/svg+xml' || dataURI.length < 120000) return setLogo(dataURI);
+    const img = new Image();
+    img.onload = () => {
+      const maxW = 600;
+      const k = Math.min(1, maxW / img.width);
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      setLogo(cv.toDataURL('image/png'));
+    };
+    img.onerror = () => setLogo(dataURI);
+    img.src = dataURI;
+  };
+  fr.onerror = () => toast('That file could not be read.');
+  fr.readAsDataURL(file);
+}
+function setLogo(uri){ state.company.logo = uri; syncForms(); touch(); toast('Logo updated.'); }
+
+/** Parse pasted CMM / CSV rows: name, nominal, +tol, -tol, measured… */
+function parsePasted(text){
+  const rows = [];
+  String(text).split(/\r?\n/).forEach(line => {
+    if (!line.trim()) return;
+    const cells = line.split(/\t|,(?![^(]*\))|;/).map(s => s.trim()).filter(s => s !== '');
+    if (cells.length < 3) return;
+    const name = cells[0];
+    if (/^(name|characteristic|feature|merkmal)$/i.test(name)) return;  // header row
+    const nums = cells.slice(1).map(num).filter(v => v !== null);
+    if (nums.length < 2) return;
+    const [nominal, upper, lower] = nums;
+    const measured = nums.slice(3);
+    rows.push({
+      id:uid(), kind:'char', balloon:'', name, group:'',
+      type:/dia|circle|bore|⌀|ø/i.test(name) ? 'diameter'
+         : /len|dist|height|width|depth/i.test(name) ? 'length'
+         : /round|circ/i.test(name) ? 'roundness'
+         : /flat/i.test(name) ? 'flatness'
+         : /pos/i.test(name) ? 'position' : 'other',
+      assoc:'', unit:'mm',
+      nominal:String(nominal),
+      upper:String(upper === undefined ? '' : upper),
+      lower:String(lower === undefined ? '' : lower),
+      U:'',
+      values:measured.join(', ')
+    });
+  });
+  return rows;
+}
+
+function workspaceJSON(){
+  reGroup();
+  return JSON.stringify({ app:'datum-report-studio', version:1,
+    company:state.company, report:state.report, chars:state.chars }, null, 2);
+}
+
+function wire(){
+  document.querySelectorAll('.tabs [role="tab"]').forEach(b =>
+    b.addEventListener('click', () => showTab(b.dataset.tab)));
+  document.querySelectorAll('.viewswitch [role="tab"]').forEach(b =>
+    b.addEventListener('click', () => showView(b.dataset.view)));
+
+  document.addEventListener('input', e => {
+    const t = e.target;
+    if (!t.dataset || !t.dataset.scope) return;
+    state[t.dataset.scope][t.dataset.key] = t.type === 'checkbox' ? t.checked : t.value;
+    touch();
+  });
+  document.addEventListener('change', e => {
+    const t = e.target;
+    if (t.dataset && t.dataset.scope) {
+      state[t.dataset.scope][t.dataset.key] = t.type === 'checkbox' ? t.checked : t.value;
+      touch();
+    }
+  });
+
+  $('accentSwatches').addEventListener('click', e => {
+    const b = e.target.closest('.swatch');
+    if (!b) return;
+    state.company.accent = b.dataset.accent;
+    syncForms(); touch();
+  });
+  $('accentPick').addEventListener('input', e => {
+    state.company.accent = e.target.value;
+    document.querySelectorAll('.swatch').forEach(s => s.setAttribute('aria-pressed','false'));
+    touch();
+  });
+
+  $('btnLogo').addEventListener('click', () => $('logoInput').click());
+  $('logoInput').addEventListener('change', e => {
+    const f = e.target.files && e.target.files[0];
+    if (f) readLogo(f);
+    e.target.value = '';
+  });
+  $('btnLogoClear').addEventListener('click', () => { state.company.logo = null; syncForms(); touch(); });
+
+  $('btnAddChar').addEventListener('click', () => { state.chars.push(newChar()); touch(true); showTab('chars'); });
+  $('btnAddGroup').addEventListener('click', () => {
+    state.chars.push({ id:uid(), kind:'group', name:'' }); touch(true);
+  });
+  $('btnClearChars').addEventListener('click', () => {
+    if (!state.chars.length || ask('Remove every characteristic from this report?')) {
+      state.chars = [newChar()]; touch(true);
+    }
+  });
+
+  $('btnPasteChars').addEventListener('click', () => openDialog($('dlgPaste')));
+  $('btnPasteGo').addEventListener('click', () => {
+    const rows = parsePasted($('pasteBox').value);
+    if (!rows.length) { $('pasteNote').textContent = 'No rows recognised — check the column order.'; return; }
+    if ($('pasteReplace').checked) state.chars = rows;
+    else state.chars = state.chars.concat(rows);
+    $('pasteBox').value = '';
+    $('pasteNote').textContent = 'Header rows are skipped automatically.';
+    $('dlgPaste').close();
+    touch(true);
+    toast(rows.length + ' characteristic' + (rows.length > 1 ? 's' : '') + ' added.');
+  });
+
+  $('btnExport').addEventListener('click', () => {
+    const json = workspaceJSON();
+    $('exportBox').value = json;
+    // Some embedded viewers refuse page-initiated downloads outright. Rather
+    // than offer a button that does nothing, hide it and point at Copy.
+    const canDownload = typeof window.claude === 'undefined';
+    $('btnDownloadJson').hidden = !canDownload;
+    $('exportNote').textContent = Math.round(json.length / 1024) + ' KB' +
+      (canDownload ? '' : ' — downloads are blocked in this viewer, use Copy');
+    openDialog($('dlgExport'));
+  });
+  $('btnCopyJson').addEventListener('click', () => {
+    const box = $('exportBox');
+    box.select();
+    if (navigator.clipboard) navigator.clipboard.writeText(box.value).then(
+      () => toast('Workspace copied to the clipboard.'),
+      () => toast('Select the text and copy it manually.'));
+    else toast('Select the text and copy it manually.');
+  });
+  $('btnDownloadJson').addEventListener('click', () => {
+    try {
+      const name = (state.report.reportNo || state.report.partNo || 'inspection-report')
+        .replace(/[^\w.-]+/g,'-') + '.json';
+      const url = URL.createObjectURL(new Blob([$('exportBox').value], { type:'application/json' }));
+      const a = el('a'); a.href = url; a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    } catch (err) { toast('Download blocked here — use Copy instead.'); }
+  });
+
+  $('btnImport').addEventListener('click', () => openDialog($('dlgImport')));
+  $('importFile').addEventListener('change', e => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const fr = new FileReader();
+    fr.onload = () => { $('importBox').value = String(fr.result); };
+    fr.readAsText(f);
+  });
+  $('btnImportGo').addEventListener('click', () => {
+    try {
+      state = migrate(JSON.parse($('importBox').value));
+      $('dlgImport').close();
+      $('demoBanner').hidden = true;
+      syncForms(); touch(true);
+      toast('Workspace opened.');
+    } catch (err) { toast('That is not a valid workspace file.'); }
+  });
+
+  $('btnPrint').addEventListener('click', () => {
+    const blockers = audit(state).filter(f => f.sev === 'block');
+    if (blockers.length && !ask(
+        blockers.length + ' blocking item' + (blockers.length > 1 ? 's' : '') +
+        ' from the audit are unresolved. The sheet will print marked DRAFT.\n\nPrint anyway?')) {
+      showTab('audit'); return;
+    }
+    try { window.print(); }
+    catch (e) { toast('Printing is blocked here — open the app in its own tab.'); }
+  });
+
+  $('optBars').addEventListener('change', e => { state.ui.bars = e.target.checked; renderSheet(); save(); });
+  $('optDraft').addEventListener('change', e => { state.ui.draft = e.target.checked; renderSheet(); save(); });
+
+  $('btnDismissDemo').addEventListener('click', () => {
+    $('demoBanner').hidden = true; state.ui.demo = false; save();
+  });
+
+  window.addEventListener('resize', fitSheet);
+  if (window.ResizeObserver) new ResizeObserver(fitSheet).observe($('sheetFit'));
+}
+
+/* ------------------------------------------------------------------ start */
+function start(){
+  buildForms();
+  const restored = load();
+  wire();
+  $('demoBanner').hidden = restored || state.ui.demo === false;
+  $('optBars').checked = state.ui.bars !== false;
+  $('optDraft').checked = state.ui.draft !== false;
+  syncForms();
+  showTab(state.ui.tab || 'chars');
+  showView(state.ui.view || 'editor');
+  reGroup();
+  touch(true);
+}
+
+// Boot only in a real document. Under the Node test harness querySelector
+// returns null, so the module is loaded for its exports without starting.
+if (typeof document !== 'undefined' && document.querySelector('#sheet')) {
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+}
+
+/* Handed to the Node test harness; harmless in the browser. */
+if (typeof globalThis !== 'undefined') {
+  globalThis.__datum = { calc, audit, num, parseValues, parsePasted, decimalsFor,
+    effective, worstVerdict, migrate, demoState, get state(){ return state; },
+    set state(v){ state = v; } };
+}
+})();
+</script>
+</body>
+</html>
