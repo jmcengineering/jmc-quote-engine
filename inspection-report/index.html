@@ -1672,6 +1672,14 @@ function fitSheet(){
 /*  wiring                                                                   */
 /* ======================================================================== */
 
+/** showModal() throws where modals are not permitted; a non-modal dialog still works. */
+function openDialog(d){
+  try { d.showModal(); }
+  catch (e) { try { d.show(); } catch (e2) { d.setAttribute('open',''); } }
+}
+/** confirm() is unavailable in some embeds — treat that as "yes, go ahead". */
+function ask(msg){ try { return confirm(msg); } catch (e) { return true; } }
+
 let toastTimer = null;
 function toast(msg){
   const old = document.querySelector('.toast');
@@ -1824,12 +1832,12 @@ function wire(){
     state.chars.push({ id:uid(), kind:'group', name:'' }); touch(true);
   });
   $('btnClearChars').addEventListener('click', () => {
-    if (!state.chars.length || confirm('Remove every characteristic from this report?')) {
+    if (!state.chars.length || ask('Remove every characteristic from this report?')) {
       state.chars = [newChar()]; touch(true);
     }
   });
 
-  $('btnPasteChars').addEventListener('click', () => $('dlgPaste').showModal());
+  $('btnPasteChars').addEventListener('click', () => openDialog($('dlgPaste')));
   $('btnPasteGo').addEventListener('click', () => {
     const rows = parsePasted($('pasteBox').value);
     if (!rows.length) { $('pasteNote').textContent = 'No rows recognised — check the column order.'; return; }
@@ -1846,7 +1854,7 @@ function wire(){
     const json = workspaceJSON();
     $('exportBox').value = json;
     $('exportNote').textContent = Math.round(json.length / 1024) + ' KB';
-    $('dlgExport').showModal();
+    openDialog($('dlgExport'));
   });
   $('btnCopyJson').addEventListener('click', () => {
     const box = $('exportBox');
@@ -1867,7 +1875,7 @@ function wire(){
     } catch (err) { toast('Download blocked here — use Copy instead.'); }
   });
 
-  $('btnImport').addEventListener('click', () => $('dlgImport').showModal());
+  $('btnImport').addEventListener('click', () => openDialog($('dlgImport')));
   $('importFile').addEventListener('change', e => {
     const f = e.target.files && e.target.files[0];
     if (!f) return;
@@ -1887,12 +1895,13 @@ function wire(){
 
   $('btnPrint').addEventListener('click', () => {
     const blockers = audit(state).filter(f => f.sev === 'block');
-    if (blockers.length && !confirm(
+    if (blockers.length && !ask(
         blockers.length + ' blocking item' + (blockers.length > 1 ? 's' : '') +
         ' from the audit are unresolved. The sheet will print marked DRAFT.\n\nPrint anyway?')) {
       showTab('audit'); return;
     }
-    window.print();
+    try { window.print(); }
+    catch (e) { toast('Printing is blocked here — open the app in its own tab.'); }
   });
 
   $('optBars').addEventListener('change', e => { state.ui.bars = e.target.checked; renderSheet(); save(); });
