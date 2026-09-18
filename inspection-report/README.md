@@ -67,10 +67,17 @@ resolve at 4:1, size features with no association method, and characteristics
 that were listed but never measured. Printing with blocking findings open stamps
 the sheet **DRAFT**.
 
-**Output** — an A4 sheet rendered live beside the editor; Print / PDF produces
-exactly what the preview shows. Save file writes a `.json` workspace holding the
-company profile, the report and every characteristic; opening it restores the
-report exactly.
+**Output** — an A4 sheet rendered live beside the editor, and two ways out:
+
+- **Download PDF** builds a real vector PDF with jsPDF: selectable, searchable
+  text, letterhead, title block, tolerance bars, page numbers. This works
+  everywhere, including inside an embedded frame where `window.print()` is
+  silently ignored and a page-initiated download is refused — there the file is
+  handed over through the host instead.
+- **Print** uses the browser's own dialog, for the hosted deployment.
+
+Save file writes a `.json` workspace holding the company profile, the report and
+every characteristic; opening it restores the report exactly.
 
 ## Tests
 

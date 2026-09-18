@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <style>
 /* ---------------------------------------------------------------------------
    Datum Report Studio — white-label dimensional inspection reports.
@@ -245,8 +247,12 @@ tr.group-row input{font-weight:600; background:var(--panel-3); border-style:dash
 /* ---------- audit ---------- */
 .audit-summary{display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px}
 .audit-stat{
-  flex:1 1 130px; border:1px solid var(--line); border-radius:8px; padding:11px 13px; background:var(--panel-2);
+  flex:1 1 130px; border:1px solid var(--line); border-left:3px solid var(--line-strong);
+  padding:11px 13px; background:var(--panel-2);
 }
+.audit-stat[data-tone="fail"]{border-left-color:var(--fail)}
+.audit-stat[data-tone="warn"]{border-left-color:var(--cond)}
+.audit-stat[data-tone="pass"]{border-left-color:var(--pass)}
 .audit-stat b{display:block; font:600 22px/1.1 var(--mono); font-variant-numeric:tabular-nums}
 .audit-stat span{font-size:11.5px; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-soft)}
 .audit-stat[data-tone="fail"] b{color:var(--fail)}
@@ -258,7 +264,7 @@ tr.group-row input{font-weight:600; background:var(--panel-3); border-style:dash
 }
 .finding:first-child{border-top:0}
 .finding-sev{
-  font:600 10px/1 var(--mono); letter-spacing:.06em; padding:4px 6px; border-radius:4px;
+  font:600 10px/1 var(--mono); letter-spacing:.06em; padding:4px 6px;
   align-self:start; margin-top:2px; white-space:nowrap;
 }
 .sev-block{background:var(--fail-soft); color:var(--fail)}
@@ -318,17 +324,25 @@ tr.group-row input{font-weight:600; background:var(--panel-3); border-style:dash
 .meta-row dd.blank{font-weight:400; color:#c0392b; font-style:italic}
 .meta-row dd.mono{font-family:var(--mono); font-weight:500}
 
-/* summary chips */
-.summary{display:flex; gap:2mm; flex-wrap:wrap; margin-bottom:3mm}
-.chip{
-  border:.25mm solid var(--paper-line); border-radius:1.5mm; padding:1.4mm 2.6mm;
-  display:flex; align-items:baseline; gap:1.6mm; background:var(--paper-band);
+/* Result block — ruled cells in the manner of a drawing title block. */
+.summary{display:flex; border:.35mm solid var(--paper-ink); margin-bottom:3mm; break-inside:avoid}
+.sum-cell{flex:1 1 0; min-width:0; padding:1.3mm 2.4mm; border-left:.2mm solid var(--paper-line)}
+.sum-cell:first-child{border-left:0}
+.sum-cell .k{display:block; font-size:6.2pt; letter-spacing:.1em; text-transform:uppercase; color:var(--paper-soft)}
+.sum-cell .v{display:block; margin-top:.3mm; font:600 10.5pt/1.1 var(--mono); font-variant-numeric:tabular-nums}
+.sum-cell[data-tone="pass"] .v{color:#14663f}
+.sum-cell[data-tone="cond"] .v{color:#7d5800}
+.sum-cell[data-tone="fail"] .v{color:#9c201a}
+.sum-verdict{
+  flex:0 0 46mm; padding:1.3mm 2.4mm; border-left:.35mm solid var(--paper-ink);
+  display:flex; flex-direction:column; justify-content:center;
 }
-.chip b{font:600 10pt/1 var(--mono); font-variant-numeric:tabular-nums}
-.chip span{font-size:6.8pt; letter-spacing:.06em; text-transform:uppercase; color:var(--paper-soft)}
-.chip[data-tone="pass"]{background:#e8f4ee; border-color:#a8d4bd} .chip[data-tone="pass"] b{color:#14663f}
-.chip[data-tone="cond"]{background:#fcf3de; border-color:#e0c583} .chip[data-tone="cond"] b{color:#7d5800}
-.chip[data-tone="fail"]{background:#fbe8e6; border-color:#e5b0ab} .chip[data-tone="fail"] b{color:#9c201a}
+.sum-verdict .k{display:block; font-size:6.2pt; letter-spacing:.1em; text-transform:uppercase; color:rgba(255,255,255,.78)}
+.sum-verdict .v{display:block; margin-top:.3mm; font-size:9.4pt; font-weight:700; letter-spacing:.11em; text-transform:uppercase; color:#fff}
+.sum-verdict[data-state="ok"]{background:#14663f}
+.sum-verdict[data-state="no"]{background:#9c201a}
+.sum-verdict[data-state="check"]{background:#7d5800}
+.sum-verdict[data-state="na"]{background:#5b6470}
 
 /* results table */
 table.results{width:100%; border-collapse:collapse; font-size:7.8pt}
@@ -355,13 +369,13 @@ td.name{font-weight:600}
 td.name small{display:block; font-weight:400; font-size:6.8pt; color:var(--paper-faint); letter-spacing:.02em}
 td.bln{font-weight:700}
 .res{
-  display:inline-block; min-width:13mm; padding:.7mm 1.4mm; border-radius:1mm;
-  font-size:6.8pt; font-weight:700; letter-spacing:.05em; text-align:center;
+  display:inline-block; min-width:12.5mm; padding:.6mm 1.2mm; border:.2mm solid currentColor;
+  font-size:6.6pt; font-weight:700; letter-spacing:.09em; text-align:center;
 }
-.res-pass{background:#e8f4ee; color:#14663f}
-.res-cond{background:#fcf3de; color:#7d5800}
-.res-fail{background:#fbe8e6; color:#9c201a}
-.res-none{background:#eef1f5; color:#7b8695}
+.res-pass{background:#eef6f1; color:#14663f}
+.res-cond{background:#fbf4e4; color:#7d5800}
+.res-fail{background:#9c201a; color:#fff; border-color:#9c201a}
+.res-none{background:#f2f4f7; color:#7b8695}
 td.dev-fail{color:#9c201a; font-weight:600}
 td.dev-cond{color:#7d5800; font-weight:600}
 .bar-cell{width:26mm; padding-right:0 !important}
@@ -460,7 +474,8 @@ dialog::backdrop{background:rgba(20,24,29,.5)}
 
     <button class="btn" id="btnImport">Import</button>
     <button class="btn" id="btnExport">Save file</button>
-    <button class="btn btn-primary" id="btnPrint">Print / PDF</button>
+    <button class="btn" id="btnPrint">Print</button>
+    <button class="btn btn-primary" id="btnPdf">Download PDF</button>
   </header>
 
   <div class="demo-banner" id="demoBanner">
@@ -1151,6 +1166,14 @@ function audit(s){
   return out.sort((a,b) => order[a.sev] - order[b.sev]);
 }
 
+/** The report's single overall disposition, from the per-row verdicts. */
+function disposition(tally){
+  if (tally.fail)        return { state:'no',    text:'Not accepted' };
+  if (tally.conditional) return { state:'check', text:'Review required' };
+  if (tally.pass)        return { state:'ok',    text:'Accepted' };
+  return { state:'na', text:'No result' };
+}
+
 function tightestBand(chars){
   const bands = chars.map(c => calc.limits(c).band).filter(b => b !== null && b > 0);
   return bands.length ? Math.min.apply(null, bands) : null;
@@ -1545,14 +1568,19 @@ function renderSheet(){
        '</div>';
   h += '</div>';
 
-  /* ---- summary chips ---- */
+  /* ---- result block, laid out like a title block ---- */
+  const disp = disposition(tally);
+  const cell = (k, v, tone) =>
+    '<div class="sum-cell"' + (tone ? ' data-tone="' + tone + '"' : '') + '>' +
+    '<span class="k">' + k + '</span><span class="v">' + v + '</span></div>';
   h += '<div class="summary">';
-  h += '<div class="chip"><b>' + chars.length + '</b><span>characteristics</span></div>';
-  h += '<div class="chip" data-tone="pass"><b>' + tally.pass + '</b><span>within tolerance</span></div>';
-  if (tally.conditional)
-    h += '<div class="chip" data-tone="cond"><b>' + tally.conditional + '</b><span>not decidable</span></div>';
-  h += '<div class="chip" data-tone="fail"><b>' + tally.fail + '</b><span>out of tolerance</span></div>';
-  h += '<div class="chip"><b>' + conform + '%</b><span>conformance</span></div>';
+  h += cell('Characteristics', chars.length);
+  h += cell('Within limits', tally.pass, 'pass');
+  if (tally.conditional) h += cell('Not decidable', tally.conditional, 'cond');
+  h += cell('Out of tolerance', tally.fail, tally.fail ? 'fail' : '');
+  h += cell('Conformance', conform + '%');
+  h += '<div class="sum-verdict" data-state="' + disp.state + '">' +
+       '<span class="k">Disposition</span><span class="v">' + esc(disp.text) + '</span></div>';
   h += '</div>';
 
   /* ---- results table ---- */
@@ -1853,12 +1881,7 @@ function wire(){
   $('btnExport').addEventListener('click', () => {
     const json = workspaceJSON();
     $('exportBox').value = json;
-    // Some embedded viewers refuse page-initiated downloads outright. Rather
-    // than offer a button that does nothing, hide it and point at Copy.
-    const canDownload = typeof window.claude === 'undefined';
-    $('btnDownloadJson').hidden = !canDownload;
-    $('exportNote').textContent = Math.round(json.length / 1024) + ' KB' +
-      (canDownload ? '' : ' — downloads are blocked in this viewer, use Copy');
+    $('exportNote').textContent = Math.round(json.length / 1024) + ' KB';
     openDialog($('dlgExport'));
   });
   $('btnCopyJson').addEventListener('click', () => {
@@ -1870,14 +1893,7 @@ function wire(){
     else toast('Select the text and copy it manually.');
   });
   $('btnDownloadJson').addEventListener('click', () => {
-    try {
-      const name = (state.report.reportNo || state.report.partNo || 'inspection-report')
-        .replace(/[^\w.-]+/g,'-') + '.json';
-      const url = URL.createObjectURL(new Blob([$('exportBox').value], { type:'application/json' }));
-      const a = el('a'); a.href = url; a.download = name;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 2000);
-    } catch (err) { toast('Download blocked here — use Copy instead.'); }
+    offerFile(reportFilename('json'), $('exportBox').value, 'application/json');
   });
 
   $('btnImport').addEventListener('click', () => openDialog($('dlgImport')));
@@ -1898,15 +1914,25 @@ function wire(){
     } catch (err) { toast('That is not a valid workspace file.'); }
   });
 
-  $('btnPrint').addEventListener('click', () => {
+  /** True when a blocking audit finding should stop the user, or they accept it. */
+  function readyToIssue(verb){
     const blockers = audit(state).filter(f => f.sev === 'block');
-    if (blockers.length && !ask(
-        blockers.length + ' blocking item' + (blockers.length > 1 ? 's' : '') +
-        ' from the audit are unresolved. The sheet will print marked DRAFT.\n\nPrint anyway?')) {
-      showTab('audit'); return;
-    }
+    if (!blockers.length) return true;
+    if (ask(blockers.length + ' blocking item' + (blockers.length > 1 ? 's' : '') +
+            ' from the audit are unresolved. The sheet will be marked DRAFT.\n\n' + verb + ' anyway?')) return true;
+    showTab('audit');
+    return false;
+  }
+
+  $('btnPrint').addEventListener('click', () => {
+    if (!readyToIssue('Print')) return;
     try { window.print(); }
-    catch (e) { toast('Printing is blocked here — open the app in its own tab.'); }
+    catch (e) { toast('Printing is blocked here — use Download PDF.'); }
+  });
+
+  $('btnPdf').addEventListener('click', e => {
+    if (!readyToIssue('Export')) return;
+    savePDF(e.currentTarget);
   });
 
   $('optBars').addEventListener('change', e => { state.ui.bars = e.target.checked; renderSheet(); save(); });
@@ -1916,8 +1942,453 @@ function wire(){
     $('demoBanner').hidden = true; state.ui.demo = false; save();
   });
 
+  // A sandboxed frame silently ignores window.print(). Don't offer it there.
+  if (typeof window.claude !== 'undefined') $('btnPrint').hidden = true;
+
   window.addEventListener('resize', fitSheet);
   if (window.ResizeObserver) new ResizeObserver(fitSheet).observe($('sheetFit'));
+}
+
+/* =========================================================================
+   PDF output.
+
+   window.print() is unavailable inside a sandboxed frame — it does not throw,
+   it simply does nothing — and a browser print dialog is poor UX for a
+   document people file and email. So the report is also built as a real
+   vector PDF: selectable, searchable text, correct A4, nothing rasterised.
+   ========================================================================= */
+const PDF = {
+  left:12, right:12, top:12, bottom:14, width:210, height:297,
+  get usable(){ return this.width - this.left - this.right; }
+};
+const INK = [20,24,29], SOFT = [91,100,112], FAINT = [141,151,163],
+      HAIR = [228,233,239], LINE = [201,209,218], BAND = [244,246,249],
+      OK = [20,102,63], WARN = [125,88,0], BAD = [156,32,26];
+
+function rgb(hex){
+  const h = String(hex || '#003393').replace('#','');
+  const n = h.length === 3 ? h.split('').map(c => c+c).join('') : h;
+  return [parseInt(n.slice(0,2),16), parseInt(n.slice(2,4),16), parseInt(n.slice(4,6),16)];
+}
+const toneRGB = v => v === 'fail' ? BAD : v === 'conditional' ? WARN : v === 'pass' ? OK : SOFT;
+
+/** Resolve an image and its aspect ratio; never rejects. */
+function loadImage(src){
+  return new Promise(res => {
+    if (!src) return res(null);
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = () => res(null);
+    i.src = src;
+  });
+}
+
+async function buildPDF(){
+  const Ctor = window.jspdf && window.jspdf.jsPDF;
+  if (!Ctor) throw new Error('The PDF library did not load. Check your connection and reload.');
+
+  const s = state, co = s.company, r = s.report;
+  const chars = s.chars.filter(c => c.kind === 'char');
+  const multi = chars.some(c => parseValues(c.values).length > 1);
+  const accent = rgb(co.accent);
+
+  const doc = new Ctor({ unit:'mm', format:'a4', compress:true });
+  const L = PDF.left, R = PDF.width - PDF.right, W = PDF.usable;
+
+  /* ------------------------------------------------------------ letterhead */
+  const logo = await loadImage(co.logo);
+  let textX = L, headBottom = PDF.top;
+  if (logo) {
+    const maxW = 30, maxH = 17;
+    const k = Math.min(maxW / logo.width, maxH / logo.height);
+    const w = logo.width * k, h = logo.height * k;
+    try { doc.addImage(logo, L, PDF.top, w, h); } catch (e) { /* unsupported format */ }
+    textX = L + maxW + 6;
+    headBottom = PDF.top + h;
+  }
+
+  let y = PDF.top + 5.4;
+  doc.setFont('helvetica','bold').setFontSize(15).setTextColor.apply(doc, accent);
+  doc.text(String(co.name || 'Company name'), textX, y);
+  if (co.tagline) {
+    y += 4.4;
+    doc.setFont('helvetica','bold').setFontSize(8.5).setTextColor.apply(doc, SOFT);
+    doc.text(String(co.tagline), textX, y);
+  }
+  doc.setFont('helvetica','normal').setFontSize(7.6).setTextColor.apply(doc, SOFT);
+  const contact = [co.phone, co.email, co.web].filter(Boolean).join('   ');
+  const addrLines = String(co.addr || '').split('\n')
+    .concat(contact ? [contact] : [])
+    .concat(co.gstin ? ['GSTIN ' + co.gstin] : [])
+    .concat(co.accred ? [String(co.accred)] : [])
+    .filter(t => String(t).trim());
+  addrLines.forEach(t => { y += 3.3; doc.text(String(t), textX, y); });
+  headBottom = Math.max(headBottom, y) + 3;
+
+  doc.setFont('helvetica','bold').setFontSize(9.6).setTextColor.apply(doc, INK);
+  doc.text('DIMENSIONAL', R, PDF.top + 4.5, { align:'right' });
+  doc.text('INSPECTION REPORT', R, PDF.top + 8.6, { align:'right' });
+  doc.setFont('courier','normal').setFontSize(7.4).setTextColor.apply(doc, SOFT);
+  doc.text((r.reportNo || 'REPORT No. —') + (r.reportRev ? '  rev ' + r.reportRev : ''),
+           R, PDF.top + 13, { align:'right' });
+  if (r.kind) doc.text(String(r.kind), R, PDF.top + 16.2, { align:'right' });
+
+  doc.setFillColor.apply(doc, accent);
+  doc.rect(L, headBottom, W, 0.7, 'F');
+  y = headBottom + 5.5;
+
+  /* ------------------------------------------------------------- meta grid */
+  const colX = [L, L + W/3, L + 2*W/3], colW = W/3 - 5;
+  const groups = [
+    ['Item', [
+      ['Part description', r.partDesc],
+      ['Part number', r.partNo],
+      ['Drawing / revision', [r.drawingNo, r.drawingRev].filter(Boolean).join(' rev ')],
+      ['Customer', r.customer],
+      ['PO / work order', r.po],
+      ['Lot / serial', [r.lot, r.serial].filter(Boolean).join(' / ')],
+      ['Material', r.material]
+    ]],
+    ['Equipment', [
+      ['Equipment', [r.machineName, r.machineModel].filter(Boolean).join(' — ')],
+      ['Serial no', r.machineSerial],
+      ['Software', r.software],
+      ['Calibration cert', r.calCert],
+      ['Calibration due', r.calDue],
+      ['Probe qualified', r.probeQual],
+      ['MPE (E)', r.mpe]
+    ]],
+    ['Record', [
+      ['Inspection date', fmtDate(r.date)],
+      ['Pieces inspected', r.sampleSize],
+      ['Lot quantity', r.lotQty],
+      ['Conditions', num(r.tempC) !== null
+        ? num(r.tempC) + ' °C' + (r.humidity ? ' / ' + r.humidity + ' % RH' : '') +
+          (r.tempComp ? ' (compensated)' : ' (uncompensated)') : ''],
+      ['Inspected by', r.inspector],
+      ['Approved by', r.approver],
+      ['Method', r.method]
+    ]]
+  ];
+
+  let metaBottom = y;
+  groups.forEach((g, gi) => {
+    const x = colX[gi];
+    let gy = y;
+    doc.setFont('helvetica','bold').setFontSize(6.9).setTextColor.apply(doc, FAINT);
+    doc.text(g[0].toUpperCase(), x, gy);
+    gy += 1.3;
+    doc.setDrawColor.apply(doc, HAIR); doc.setLineWidth(0.15);
+    doc.line(x, gy, x + colW, gy);
+    gy += 3.4;
+    g[1].forEach(([k, v]) => {
+      if (!String(v == null ? '' : v).trim() && ['Material','MPE (E)','Method','Lot quantity'].indexOf(k) >= 0) return;
+      doc.setFont('helvetica','normal').setFontSize(7.4).setTextColor.apply(doc, SOFT);
+      doc.text(k, x, gy);
+      const val = String(v == null ? '' : v).trim();
+      if (val) { doc.setFont('helvetica','bold').setTextColor.apply(doc, INK); }
+      else { doc.setFont('helvetica','italic').setTextColor.apply(doc, BAD); }
+      const lines = doc.splitTextToSize(val || 'not stated', colW - 24);
+      doc.text(lines, x + 24, gy);
+      gy += 3.3 * lines.length;
+    });
+    metaBottom = Math.max(metaBottom, gy);
+  });
+  y = metaBottom + 2.5;
+
+  /* --------------------------------------------------- result title block */
+  const tally = { pass:0, conditional:0, fail:0, none:0 };
+  chars.forEach(c => tally[worstVerdict(c, parseValues(c.values))]++);
+  const decided = tally.pass + tally.conditional + tally.fail;
+  const conform = decided ? Math.round(tally.pass / decided * 100) : 0;
+  const disp = disposition(tally);
+
+  const blockH = 9.5, verdictW = 46;
+  const cells = [['Characteristics', String(chars.length), null],
+                 ['Within limits', String(tally.pass), OK]];
+  if (tally.conditional) cells.push(['Not decidable', String(tally.conditional), WARN]);
+  cells.push(['Out of tolerance', String(tally.fail), tally.fail ? BAD : null]);
+  cells.push(['Conformance', conform + '%', null]);
+
+  const cellW = (W - verdictW) / cells.length;
+  doc.setDrawColor.apply(doc, INK); doc.setLineWidth(0.35);
+  doc.rect(L, y, W, blockH);
+  cells.forEach(([k, v, tone], i) => {
+    const x = L + i * cellW;
+    if (i) {
+      doc.setDrawColor.apply(doc, LINE); doc.setLineWidth(0.15);
+      doc.line(x, y, x, y + blockH);
+    }
+    doc.setFont('helvetica','normal').setFontSize(6.2).setTextColor.apply(doc, SOFT);
+    doc.text(k.toUpperCase(), x + 2.2, y + 3.4);
+    doc.setFont('courier','bold').setFontSize(10).setTextColor.apply(doc, tone || INK);
+    doc.text(v, x + 2.2, y + 7.6);
+  });
+  const vx = L + W - verdictW;
+  doc.setFillColor.apply(doc, disp.state === 'ok' ? OK : disp.state === 'no' ? BAD
+                            : disp.state === 'check' ? WARN : SOFT);
+  doc.rect(vx, y, verdictW, blockH, 'F');
+  doc.setFont('helvetica','normal').setFontSize(6.2).setTextColor(255,255,255);
+  doc.text('DISPOSITION', vx + 2.4, y + 3.4);
+  doc.setFont('helvetica','bold').setFontSize(9.4);
+  doc.text(String(disp.text).toUpperCase(), vx + 2.4, y + 7.6);
+  y += blockH + 4;
+
+  /* ------------------------------------------------------- results table */
+  // Standard PDF fonts are WinAnsi-encoded: stay inside it or glyphs drop out.
+  const head = multi
+    ? ['Bln','Characteristic','Nominal','+Tol','-Tol','Mean','Min','Max','Dev.','Cpk','Result']
+    : ['Bln','Characteristic','Nominal','+Tol','-Tol','Measured','Dev.','Out by','% tol','Position in tolerance','Result'];
+  const widths = multi
+    ? { 0:8, 2:16, 3:12, 4:12, 5:16, 6:16, 7:16, 8:15, 9:12, 10:16 }
+    : { 0:8, 2:17, 3:13, 4:13, 5:17, 6:15, 7:15, 8:11, 9:22, 10:16 };
+  const barCol = multi ? -1 : 9, resCol = 10;
+
+  const body = [], meta = [];
+  s.chars.forEach(c => {
+    if (c.kind === 'group') {
+      body.push([{ content:String(c.name || '(unnamed section)'), colSpan:head.length }]);
+      meta.push({ group:true });
+      return;
+    }
+    const d = decimalsFor(c);
+    const values = parseValues(c.values);
+    const eff = effective(c);
+    const verdict = worstVerdict(c, values);
+    const st = calc.stats(values);
+    const rep = st.n ? (st.n > 1 ? st.mean : values[0]) : null;
+    const dev = calc.deviation(rep, c.nominal);
+    const out = rep === null ? null : calc.outBy(rep, eff);
+    const pct = rep === null ? null : calc.pctOfTol(rep, c);
+    const cap = multi ? calc.capability(values, eff) : null;
+    const kindLabel = (TYPES.find(t => t[0] === c.type) || ['',''])[1];
+    const sub = [kindLabel, c.assoc, c.unit].filter(Boolean).join(' · ');
+
+    const row = [String(c.balloon || ''), String(c.name || '—') + (sub ? '\n' + sub : ''),
+                 fx(num(c.nominal), d), signed(num(c.upper), d), signed(num(c.lower), d)];
+    if (multi) row.push(fx(st.n ? st.mean : null, d), fx(st.n ? st.min : null, d), fx(st.n ? st.max : null, d));
+    else row.push(fx(rep, d));
+    row.push(signed(dev, d));
+    if (multi) row.push(cap && cap.cpk !== null ? cap.cpk.toFixed(2) : '');
+    else { row.push(out ? signed(out, d) : ''); row.push(pct === null ? '' : Math.round(pct) + '%'); row.push(''); }
+    row.push({ pass:'PASS', conditional:'CHECK', fail:'FAIL', none:'—' }[verdict]);
+    body.push(row);
+    meta.push({ group:false, verdict, c:eff, value:rep });
+  });
+
+  doc.autoTable({
+    head:[head], body:body, startY:y,
+    margin:{ left:L, right:PDF.right, bottom:PDF.bottom },
+    theme:'plain',
+    styles:{ font:'courier', fontSize:6.6, cellPadding:{ top:1.1, bottom:1.1, left:1.2, right:1.2 },
+             textColor:INK, lineColor:HAIR, lineWidth:0, overflow:'linebreak', valign:'middle' },
+    headStyles:{ font:'helvetica', fontStyle:'bold', fontSize:6.3, textColor:INK,
+                 fillColor:BAND, halign:'right', lineWidth:{ top:0.3, bottom:0.3 }, lineColor:INK },
+    bodyStyles:{ halign:'right', lineWidth:{ bottom:0.1 }, lineColor:HAIR },
+    columnStyles:Object.assign({ 1:{ halign:'left', font:'helvetica' } },
+      Object.keys(widths).reduce((a,k) => { a[k] = { cellWidth:widths[k] }; return a; }, {}),
+      { 0:{ cellWidth:widths[0], halign:'left', fontStyle:'bold' },
+        [resCol]:{ cellWidth:widths[resCol], halign:'center', font:'helvetica', fontStyle:'bold', fontSize:6.2 } }),
+    didParseCell(data){
+      if (data.section !== 'body') return;
+      const m = meta[data.row.index];
+      if (!m) return;
+      if (m.group) {
+        data.cell.styles.fillColor = BAND;
+        data.cell.styles.font = 'helvetica';
+        data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.fontSize = 6.6;
+        data.cell.styles.textColor = SOFT;
+        data.cell.styles.halign = 'left';
+        return;
+      }
+      if (data.column.index === 1) {
+        data.cell.styles.fontSize = 6.6;
+        data.cell.styles.fontStyle = 'bold';
+      }
+      if (m.verdict === 'fail' || m.verdict === 'conditional') {
+        // the columns that carry the departure from nominal
+        const hot = multi ? [8] : [5,6,7];
+        if (hot.indexOf(data.column.index) >= 0) {
+          data.cell.styles.textColor = toneRGB(m.verdict);
+          data.cell.styles.fontStyle = 'bold';
+        }
+      }
+      if (data.column.index === resCol) {
+        if (m.verdict === 'fail') { data.cell.styles.fillColor = BAD; data.cell.styles.textColor = [255,255,255]; }
+        else if (m.verdict === 'conditional') { data.cell.styles.fillColor = [251,244,228]; data.cell.styles.textColor = WARN; }
+        else if (m.verdict === 'pass') { data.cell.styles.fillColor = [238,246,241]; data.cell.styles.textColor = OK; }
+        else { data.cell.styles.fillColor = [242,244,247]; data.cell.styles.textColor = SOFT; }
+      }
+    },
+    didDrawCell(data){
+      if (data.section !== 'body' || data.column.index !== barCol) return;
+      const m = meta[data.row.index];
+      if (!m || m.group || m.value === null) return;
+      drawBar(doc, data.cell, m.c, m.value, m.verdict);
+    }
+  });
+
+  /* ------------------------------------------- statement, sign-off, foot */
+  y = doc.lastAutoTable.finalY + 4;
+  const anyU = chars.some(c => num(c.U) !== null) || num(r.defaultU) !== null;
+  const stringent = /stringent/i.test(r.rule || '');
+  const para = [];
+  para.push(tally.pass + ' of ' + chars.length + ' characteristics conform to the stated limits' +
+    (tally.fail ? '; ' + tally.fail + ' do not' : '') +
+    (tally.conditional ? '; ' + tally.conditional + ' cannot be decided within the measurement uncertainty' : '') + '.');
+  para.push(stringent && anyU
+    ? 'Conformance decided by stringent acceptance per ISO 14253-1: a result is accepted only when it lies inside the specification limits by at least the expanded uncertainty U (k = 2). Results inside the limits but within U of one are reported CHECK — neither conformance nor non-conformance is proven.'
+    : 'Conformance decided by simple acceptance: the measured value is compared directly with the specification limits and measurement uncertainty is not applied as a guard band. Results within U of a limit should be treated as undecided.');
+  if (num(r.tempC) !== null)
+    para.push('Measured at ' + num(r.tempC) + ' °C' + (r.tempComp
+      ? ', corrected to the ISO 1 reference temperature of 20 °C.'
+      : '. Results are NOT corrected to the ISO 1 reference temperature of 20 °C.'));
+  if (r.notes) para.push(String(r.notes));
+
+  doc.setFont('helvetica','normal').setFontSize(7);
+  const wrapped = para.map(t => doc.splitTextToSize(t, W - 6));
+  const boxH = 6.4 + wrapped.reduce((a,l) => a + l.length * 3, 0) + wrapped.length * 1;
+  if (y + boxH + 26 > PDF.height - PDF.bottom) { doc.addPage(); y = PDF.top; }
+
+  doc.setFillColor.apply(doc, BAND); doc.setDrawColor.apply(doc, LINE); doc.setLineWidth(0.15);
+  doc.rect(L, y, W, boxH, 'FD');
+  doc.setFont('helvetica','bold').setFontSize(6.6).setTextColor.apply(doc, INK);
+  doc.text('CONFORMANCE STATEMENT & DECISION RULE', L + 3, y + 4);
+  let ty = y + 7.6;
+  doc.setFont('helvetica','normal').setFontSize(7).setTextColor.apply(doc, SOFT);
+  wrapped.forEach(lines => { doc.text(lines, L + 3, ty); ty += lines.length * 3 + 1; });
+  y += boxH + 10;
+
+  const signW = (W - 12) / 3;
+  [['Inspected by', r.inspector, fmtDate(r.date)],
+   ['Approved by', r.approver, r.approver ? fmtDate(r.date) : ''],
+   ['Customer acceptance', '', 'date']].forEach(([role, who, when], i) => {
+    const x = L + i * (signW + 6);
+    doc.setDrawColor.apply(doc, INK); doc.setLineWidth(0.3);
+    doc.line(x, y, x + signW, y);
+    doc.setFont('helvetica','normal').setFontSize(6.6).setTextColor.apply(doc, FAINT);
+    doc.text(role.toUpperCase(), x, y + 3.2);
+    doc.setFont('helvetica','bold').setFontSize(8.4).setTextColor.apply(doc, INK);
+    doc.text(String(who || ''), x, y + 7.2);
+    doc.setFont('courier','normal').setFontSize(7).setTextColor.apply(doc, SOFT);
+    doc.text(String(when || ''), x, y + 11);
+  });
+
+  const pages = doc.getNumberOfPages();
+  const blockers = audit(state).filter(f => f.sev === 'block').length;
+  for (let i = 1; i <= pages; i++) {
+    doc.setPage(i);
+    doc.setDrawColor.apply(doc, HAIR); doc.setLineWidth(0.15);
+    doc.line(L, PDF.height - PDF.bottom + 3, R, PDF.height - PDF.bottom + 3);
+    doc.setFont('helvetica','normal').setFontSize(6.6).setTextColor.apply(doc, FAINT);
+    if (co.footer) doc.text(doc.splitTextToSize(String(co.footer), W - 40)[0], L, PDF.height - PDF.bottom + 6.6);
+    doc.setFont('courier','normal');
+    doc.text([co.name, r.reportNo, fmtDate(r.date)].filter(Boolean).join(' · ') +
+             '   Page ' + i + ' of ' + pages, R, PDF.height - PDF.bottom + 6.6, { align:'right' });
+    if (s.ui.draft && blockers) {
+      doc.saveGraphicsState();
+      try { doc.setGState(new doc.GState({ opacity:0.09 })); } catch (e) { /* older jsPDF */ }
+      doc.setFont('helvetica','bold').setFontSize(62).setTextColor.apply(doc, BAD);
+      doc.text('DRAFT', PDF.width/2, PDF.height/2 + 12, { align:'center', angle:24 });
+      doc.restoreGraphicsState();
+    }
+  }
+  return doc;
+}
+
+/** The same tolerance bar as the screen, drawn with PDF primitives. */
+function drawBar(doc, cell, c, value, verdict){
+  const { utl, ltl } = calc.limits(c);
+  const v = num(value), nom = num(c.nominal);
+  if (utl === null || v === null) return;
+  const pad = 1.2;
+  const x0 = cell.x + pad, w = cell.width - pad * 2;
+  const mid = cell.y + cell.height / 2;
+  const band = Math.max(utl - ltl, 1e-9), span = band * 3;
+  const lo = (utl + ltl) / 2 - span / 2;
+  const at = val => x0 + Math.max(0, Math.min(1, (val - lo) / span)) * w;
+  const col = toneRGB(verdict);
+
+  doc.setFillColor(237, 240, 244); doc.rect(x0, mid - 0.9, w, 1.8, 'F');
+  doc.setFillColor(211, 224, 242); doc.rect(at(ltl), mid - 0.9, at(utl) - at(ltl), 1.8, 'F');
+  const U = Math.abs(num(c.U) ?? 0);
+  if (U > 0) {
+    const gw = Math.min(at(ltl + U) - at(ltl), (at(utl) - at(ltl)) / 2);
+    if (gw > 0.1) {
+      doc.setFillColor(179, 201, 232);
+      doc.rect(at(ltl), mid - 0.9, gw, 1.8, 'F');
+      doc.rect(at(utl) - gw, mid - 0.9, gw, 1.8, 'F');
+    }
+  }
+  doc.setDrawColor.apply(doc, SOFT); doc.setLineWidth(0.2);
+  [ltl, utl].forEach(t => doc.line(at(t), mid - 1.6, at(t), mid + 1.6));
+  if (nom !== null) {
+    doc.setDrawColor.apply(doc, FAINT); doc.setLineWidth(0.15);
+    doc.line(at(nom), mid - 1.3, at(nom), mid + 1.3);
+  }
+  doc.setFillColor.apply(doc, col);
+  if (v < lo || v > lo + span) {
+    const right = v > lo + span;
+    const tip = right ? x0 + w : x0, back = right ? x0 + w - 2 : x0 + 2;
+    doc.triangle(tip, mid, back, mid - 1.1, back, mid + 1.1, 'F');
+  } else {
+    doc.setDrawColor.apply(doc, col); doc.setLineWidth(0.35);
+    doc.line(at(v), mid - 1.8, at(v), mid + 1.8);
+    doc.circle(at(v), mid, 0.7, 'F');
+  }
+}
+
+/**
+ * Hand a generated file to the viewer. In an embedded viewer a page-initiated
+ * download is refused outright, so route through the host when it offers one.
+ */
+async function offerFile(filename, data, mime){
+  let host = null;
+  try {
+    if (typeof window.claude !== 'undefined' && window.claude && window.claude.use)
+      host = await window.claude.use('downloads');
+  } catch (e) { host = null; }
+
+  if (host) {
+    try {
+      await host.save({ filename:filename, data:data });
+      toast('Saved ' + filename + '.');
+    } catch (err) {
+      if (err && err.code === 'declined') return;
+      toast('The viewer would not save that file.');
+    }
+    return;
+  }
+  try {
+    const blob = data instanceof Blob ? data : new Blob([data], { type:mime || 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = el('a'); a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    toast('Saved ' + filename + '.');
+  } catch (e) {
+    toast('Saving is blocked here — open the app in its own tab.');
+  }
+}
+
+function reportFilename(ext){
+  const base = (state.report.reportNo || state.report.partNo || 'inspection-report')
+    .replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'inspection-report';
+  return base + '.' + ext;
+}
+
+async function savePDF(btn){
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Building…';
+  try {
+    const doc = await buildPDF();
+    await offerFile(reportFilename('pdf'), doc.output('blob'), 'application/pdf');
+  } catch (err) {
+    toast(err && err.message ? err.message : 'The PDF could not be built.');
+  } finally {
+    btn.disabled = false; btn.textContent = label;
+  }
 }
 
 /* ------------------------------------------------------------------ start */
@@ -1944,7 +2415,7 @@ if (typeof document !== 'undefined' && document.querySelector('#sheet')) {
 
 /* Handed to the Node test harness; harmless in the browser. */
 if (typeof globalThis !== 'undefined') {
-  globalThis.__datum = { calc, audit, num, parseValues, parsePasted, decimalsFor,
+  globalThis.__datum = { calc, audit, num, parseValues, parsePasted, decimalsFor, disposition, rgb, reportFilename, buildPDF,
     effective, worstVerdict, migrate, demoState, get state(){ return state; },
     set state(v){ state = v; } };
 }

@@ -147,5 +147,22 @@ s.chars[1].U = '0.0040'; s.chars[1].upper = '0.0050'; s.chars[1].lower = '-0.005
 ok('4:1 ratio breach reported',
    audit(s).some(f => /uncertainty consumes the tolerance/i.test(f.title)));
 
+console.log('\n14. Overall disposition');
+const { disposition, rgb, reportFilename } = d;
+ok('any failure means not accepted', disposition({pass:4,conditional:1,fail:1}).state === 'no');
+ok('undecided outranks a clean pass', disposition({pass:7,conditional:1,fail:0}).state === 'check');
+ok('all clear is accepted', disposition({pass:8,conditional:0,fail:0}).state === 'ok');
+ok('nothing measured has no result', disposition({pass:0,conditional:0,fail:0,none:3}).state === 'na');
+
+console.log('\n15. PDF helpers');
+ok('hex to rgb', JSON.stringify(rgb('#003393')) === '[0,51,147]');
+ok('short hex expands', JSON.stringify(rgb('#abc')) === '[170,187,204]');
+ok('bad input falls back to the brand blue', JSON.stringify(rgb(null)) === '[0,51,147]');
+d.state = demoState();
+d.state.report.reportNo = 'UMS/2026/0914';
+ok('filename is filesystem-safe', reportFilename('pdf') === 'UMS-2026-0914.pdf');
+d.state.report.reportNo = ''; d.state.report.partNo = '';
+ok('falls back when unnumbered', reportFilename('json') === 'inspection-report.json');
+
 console.log('\n' + (fail ? fail + ' FAILED, ' : '') + pass + ' passed');
 process.exit(fail ? 1 : 0);
