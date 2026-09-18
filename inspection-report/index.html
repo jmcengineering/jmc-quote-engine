@@ -368,14 +368,11 @@ table.results tbody tr.grp td{
 td.name{font-weight:600}
 td.name small{display:block; font-weight:400; font-size:6.8pt; color:var(--paper-faint); letter-spacing:.02em}
 td.bln{font-weight:700}
-.res{
-  display:inline-block; min-width:12.5mm; padding:.6mm 1.2mm; border:.2mm solid currentColor;
-  font-size:6.6pt; font-weight:700; letter-spacing:.09em; text-align:center;
-}
-.res-pass{background:#eef6f1; color:#14663f}
-.res-cond{background:#fbf4e4; color:#7d5800}
-.res-fail{background:#fbeceb; color:#9c201a}
-.res-none{background:#f2f4f7; color:#7b8695}
+.res{font-size:7.2pt; font-weight:700; letter-spacing:.09em}
+.res-pass{color:#14663f}
+.res-cond{color:#7d5800}
+.res-fail{color:#9c201a}
+.res-none{color:#7b8695}
 td.dev-fail{color:#9c201a; font-weight:600}
 td.dev-cond{color:#7d5800; font-weight:600}
 .bar-cell{width:26mm; padding-right:0 !important}
@@ -2216,12 +2213,7 @@ async function buildPDF(){
         }
       }
       if (data.column.index === resCol) {
-        const skin = { fail:[[251,236,235], BAD], conditional:[[251,244,228], WARN],
-                       pass:[[238,246,241], OK], none:[[242,244,247], SOFT] }[m.verdict];
-        data.cell.styles.fillColor = skin[0];
-        data.cell.styles.textColor = skin[1];
-        data.cell.styles.lineColor = skin[1];
-        data.cell.styles.lineWidth = { top:0.12, right:0.12, bottom:0.12, left:0.12 };
+        data.cell.styles.textColor = toneRGB(m.verdict);
       }
     },
     didDrawCell(data){
