@@ -54,6 +54,11 @@ in the signed-in user's own drive:
 | `_index.json` | customer / status / total for the Saved Quotes list |
 | `_autosave_working.json` | crash-recovery copy of the quote being edited |
 
+Rate Master settings are also kept in the browser (localStorage), together with the
+OneDrive folder name. On sign-in the app reads `_settings.json` and keeps whichever copy
+was edited more recently. It never uploads settings before that read has succeeded, so an
+unreachable OneDrive can't reset your saved rates to the defaults.
+
 OneDrive accepts a single file up to 4 MB, which a photo-heavy quote can reach.
 
 ## Tests
