@@ -22,6 +22,10 @@
     --graphite-900:#1b2128;
     --graphite-800:#252c35;
     --header-bg:#1b2128;
+    /* Header text and cell dividers are picked from --header-bg in applyBrandColor(), so a
+       light "Table / header color" gets dark text instead of near-white text on near-white. */
+    --header-fg:#e7e9ec;
+    --header-line:rgba(255,255,255,.12);
     --steel-line:#3d4750;
     --paper:#f3f1ea;
     --paper-panel:#ffffff;
@@ -105,7 +109,7 @@
 
   table.rt{width:100%; border-collapse:collapse; font-size:12.5px;}
   table.rt th{
-    background:var(--header-bg); color:#e7e9ec; font-family:var(--mono); font-weight:600; font-size:11px;
+    background:var(--header-bg); color:var(--header-fg); font-family:var(--mono); font-weight:600; font-size:11px;
     text-transform:uppercase; letter-spacing:.03em; padding:8px 8px; text-align:left;
   }
   table.rt td{padding:6px 7px; border-bottom:1px solid #e5e2d8; vertical-align:middle;}
@@ -121,13 +125,17 @@
   .parts-scroll{overflow:auto; max-height:70vh; border:1px solid var(--steel-line); border-radius:6px; position:relative;}
   table.parts{width:100%; border-collapse:separate; border-spacing:0; font-size:12px; min-width:2050px;}
   table.parts thead th{
-    background:var(--header-bg); color:#e7e9ec; font-family:var(--mono); font-weight:600; font-size:10.5px;
-    text-transform:uppercase; padding:8px 6px; text-align:center; white-space:nowrap; border-right:1px solid rgba(255,255,255,.1);
-    border-bottom:1px solid rgba(255,255,255,.12);
+    background:var(--header-bg); color:var(--header-fg); font-family:var(--mono); font-weight:600; font-size:10.5px;
+    line-height:14px; height:31px;
+    text-transform:uppercase; padding:8px 6px; text-align:center; white-space:nowrap; border-right:1px solid var(--header-line);
+    border-bottom:1px solid var(--header-line);
     position:sticky; top:0; z-index:4;
   }
-  /* Second header row (Dia/T/W/L + process labels) sits below row 1, so it sticks lower down. */
-  table.parts thead tr:nth-child(2) th{ top:33px; }
+  /* Second header row (Dia/T/W/L + process labels) sticks directly under row 1. Row 1 is a
+     fixed 31px (14px line + 2x8px padding + 1px border) so this offset can't drift with the
+     font: it used to be a guessed 33px against a real ~29px row, leaving a gap that body rows
+     scrolled visibly through. Keep the two numbers in step. */
+  table.parts thead tr:nth-child(2) th{ top:31px; }
   table.parts thead th.grp-mat{background:var(--header-bg); box-shadow:inset 0 0 0 999px rgba(185,140,60,.18);}
   table.parts thead th.grp-proc{background:var(--header-bg); box-shadow:inset 0 0 0 999px rgba(60,140,185,.18);}
   table.parts thead th.grp-out{background:var(--header-bg); box-shadow:inset 0 0 0 999px rgba(185,60,60,.16);}
@@ -444,7 +452,7 @@
     </div>
 
     <div class="card">
-      <h2>Parts <span class="sub">First five columns stay put while you scroll right</span></h2>
+      <h2>Parts <span class="sub">S.No → Material stay put while you scroll right; headers stay put while you scroll down</span></h2>
       <div class="parts-scroll">
         <table class="parts" id="partsTable">
           <thead>
@@ -755,11 +763,35 @@ function formatMargin(margin, marginPct){
   if(state.marginDisplayMode==='percent') return marginPct+'%';
   return fmt(margin)+` (${marginPct}%)`;
 }
+/* Text colour for anything drawn on the table/header colour. The header text used to be a
+   fixed near-white, so picking a light "Table / header color" made every column heading
+   vanish — on screen and in the PDF. Pick whichever of light/dark text contrasts more
+   (WCAG relative luminance), so any colour the picker allows stays readable. */
+const HEADER_TEXT_LIGHT = [231,233,236];
+const HEADER_TEXT_DARK  = [27,33,40];
+function relLuminance(rgb){
+  const [r,g,b] = rgb.map(v=>{ v/=255; return v<=0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4); });
+  return 0.2126*r + 0.7152*g + 0.0722*b;
+}
+function contrastRatio(a, b){
+  const la = relLuminance(a), lb = relLuminance(b);
+  return (Math.max(la,lb)+0.05) / (Math.min(la,lb)+0.05);
+}
+function headerTextRgb(bgHex){
+  const bg = hexToRgb(bgHex);
+  return contrastRatio(bg, HEADER_TEXT_LIGHT) >= contrastRatio(bg, HEADER_TEXT_DARK)
+    ? HEADER_TEXT_LIGHT : HEADER_TEXT_DARK;
+}
 function applyBrandColor(){
-  document.documentElement.style.setProperty('--brass', state.brandColor);
-  document.documentElement.style.setProperty('--brass-dark', shade(state.brandColor, -0.28));
-  document.documentElement.style.setProperty('--brass-light', shade(state.brandColor, 0.35));
-  document.documentElement.style.setProperty('--header-bg', state.headerColor);
+  const root = document.documentElement.style;
+  root.setProperty('--brass', state.brandColor);
+  root.setProperty('--brass-dark', shade(state.brandColor, -0.28));
+  root.setProperty('--brass-light', shade(state.brandColor, 0.35));
+  root.setProperty('--header-bg', state.headerColor);
+  const fg = headerTextRgb(state.headerColor);
+  const onDark = fg === HEADER_TEXT_LIGHT;
+  root.setProperty('--header-fg', 'rgb('+fg.join(',')+')');
+  root.setProperty('--header-line', onDark ? 'rgba(255,255,255,.12)' : 'rgba(0,0,0,.14)');
 }
 
 /* ================= RATE CONTEXT ================= */
@@ -1479,7 +1511,7 @@ document.getElementById('exportPdfBtn').addEventListener('click', async ()=>{
     },
     theme: 'grid',
     styles:{fontSize:9, cellPadding:4, font:'helvetica', minCellHeight: showPhoto?42:0, lineWidth:0.4, lineColor:[224,218,204]},
-    headStyles:{fillColor:[hr,hg,hb], textColor:[240,240,240], fontStyle:'bold', lineColor:[hr,hg,hb]},
+    headStyles:{fillColor:[hr,hg,hb], textColor:headerTextRgb(state.headerColor).slice(), fontStyle:'bold', lineColor:[hr,hg,hb]},
     alternateRowStyles:{fillColor:[248,246,240]},
     columnStyles: showPhoto ? {1:{cellWidth:50}, 2:{cellWidth:46}, 3:{cellWidth:120}} : {1:{cellWidth:50}, 2:{cellWidth:150}},
     didDrawCell: (data)=>{

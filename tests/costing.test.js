@@ -83,5 +83,15 @@ const d = c.collectQuoteData();
 ok('rates snapshot is embedded', !!(d.rates && d.rates.materials.length && d.rates.stockAllowance !== undefined));
 ok('snapshot is a copy, not a reference', d.rates.materials !== state.materials);
 
+console.log('\n10. Table header text stays readable on any header colour');
+const { headerTextRgb, contrastRatio, hexToRgb } = c;
+const dark = [27,33,40];
+ok('default dark header keeps light text', JSON.stringify(headerTextRgb('#1b2128')) !== JSON.stringify(dark));
+ok('white header gets dark text', JSON.stringify(headerTextRgb('#ffffff')) === JSON.stringify(dark));
+ok('yellow header gets dark text', JSON.stringify(headerTextRgb('#ffe600')) === JSON.stringify(dark));
+const worst = ['#000000','#ffffff','#ffe600','#7f8c99','#808080','#003393','#e8eef7','#00ff00','#ff0000','#1b2128']
+  .map(h=>contrastRatio(hexToRgb(h), headerTextRgb(h)));
+ok('every sampled colour gets at least 4:1 contrast', Math.min(...worst) >= 4, `min ${Math.min(...worst).toFixed(2)}`);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
