@@ -22,6 +22,10 @@
     --graphite-900:#1b2128;
     --graphite-800:#252c35;
     --header-bg:#1b2128;
+    /* Header text and cell dividers are picked from --header-bg in applyBrandColor(), so a
+       light "Table / header color" gets dark text instead of near-white text on near-white. */
+    --header-fg:#e7e9ec;
+    --header-line:rgba(255,255,255,.12);
     --steel-line:#3d4750;
     --paper:#f3f1ea;
     --paper-panel:#ffffff;
@@ -105,7 +109,7 @@
 
   table.rt{width:100%; border-collapse:collapse; font-size:12.5px;}
   table.rt th{
-    background:var(--header-bg); color:#e7e9ec; font-family:var(--mono); font-weight:600; font-size:11px;
+    background:var(--header-bg); color:var(--header-fg); font-family:var(--mono); font-weight:600; font-size:11px;
     text-transform:uppercase; letter-spacing:.03em; padding:8px 8px; text-align:left;
   }
   table.rt td{padding:6px 7px; border-bottom:1px solid #e5e2d8; vertical-align:middle;}
@@ -121,13 +125,17 @@
   .parts-scroll{overflow:auto; max-height:70vh; border:1px solid var(--steel-line); border-radius:6px; position:relative;}
   table.parts{width:100%; border-collapse:separate; border-spacing:0; font-size:12px; min-width:2050px;}
   table.parts thead th{
-    background:var(--header-bg); color:#e7e9ec; font-family:var(--mono); font-weight:600; font-size:10.5px;
-    text-transform:uppercase; padding:8px 6px; text-align:center; white-space:nowrap; border-right:1px solid rgba(255,255,255,.1);
-    border-bottom:1px solid rgba(255,255,255,.12);
+    background:var(--header-bg); color:var(--header-fg); font-family:var(--mono); font-weight:600; font-size:10.5px;
+    line-height:14px; height:31px;
+    text-transform:uppercase; padding:8px 6px; text-align:center; white-space:nowrap; border-right:1px solid var(--header-line);
+    border-bottom:1px solid var(--header-line);
     position:sticky; top:0; z-index:4;
   }
-  /* Second header row (Dia/T/W/L + process labels) sits below row 1, so it sticks lower down. */
-  table.parts thead tr:nth-child(2) th{ top:33px; }
+  /* Second header row (Dia/T/W/L + process labels) sticks directly under row 1. Row 1 is a
+     fixed 31px (14px line + 2x8px padding + 1px border) so this offset can't drift with the
+     font: it used to be a guessed 33px against a real ~29px row, leaving a gap that body rows
+     scrolled visibly through. Keep the two numbers in step. */
+  table.parts thead tr:nth-child(2) th{ top:31px; }
   table.parts thead th.grp-mat{background:var(--header-bg); box-shadow:inset 0 0 0 999px rgba(185,140,60,.18);}
   table.parts thead th.grp-proc{background:var(--header-bg); box-shadow:inset 0 0 0 999px rgba(60,140,185,.18);}
   table.parts thead th.grp-out{background:var(--header-bg); box-shadow:inset 0 0 0 999px rgba(185,60,60,.16);}
@@ -444,7 +452,7 @@
     </div>
 
     <div class="card">
-      <h2>Parts <span class="sub">First five columns stay put while you scroll right</span></h2>
+      <h2>Parts <span class="sub">S.No → Material stay put while you scroll right; headers stay put while you scroll down</span></h2>
       <div class="parts-scroll">
         <table class="parts" id="partsTable">
           <thead>
@@ -632,6 +640,7 @@ const state = {
   marginDisplayMode: 'both',
   oneDriveFolder: 'JMC Quotations',
   lastQuoteSeq: 100,
+  settingsSavedAt: null,    // when Rate Master / branding settings were last edited
   quoteStatus: 'Open',
   // --- rate context for the quote currently open (see activeRates below) ---
   quoteMargin: 15,          // mirrors #qMargin; costing reads this, never the DOM
@@ -656,7 +665,30 @@ function newPart(){
 
 /* ================= PERSISTENCE ================= */
 const STORAGE_KEY = 'jmc-quote-engine-settings-v4';
-const storageAvailable = (typeof window.storage !== 'undefined' && window.storage !== null);
+/* A copy of the settings kept in this browser. `window.storage` only exists inside Claude's
+   artifact preview; on the deployed site the app had NO local copy at all, so a single failed
+   OneDrive read left it running on the hard-coded default rates. Fall back to localStorage. */
+const localSettingsStore = (()=>{
+  if(typeof window.storage !== 'undefined' && window.storage !== null){
+    return {
+      get: async ()=>{ const r = await window.storage.get(STORAGE_KEY, false); return r && r.value ? r.value : null; },
+      set: async (v)=>{ await window.storage.set(STORAGE_KEY, v, false); }
+    };
+  }
+  try{
+    const ls = window.localStorage;
+    const probe = STORAGE_KEY + '-probe';
+    ls.setItem(probe, '1'); ls.removeItem(probe);
+    return { get: async ()=>ls.getItem(STORAGE_KEY), set: async (v)=>{ ls.setItem(STORAGE_KEY, v); } };
+  }catch(err){ return null; }   // private mode / blocked storage: OneDrive only
+})();
+const storageAvailable = !!localSettingsStore;
+
+/* Has this session read the settings file in OneDrive yet?
+   'unknown' until the first read, 'ready' once read (or confirmed absent), 'failed' if the
+   read errored. Settings are only ever UPLOADED when 'ready': uploading before the saved
+   copy has been read is how a fresh session's default rates overwrote the real ones. */
+let oneDriveSettingsState = 'unknown';
 
 let oneDriveSyncTimer = null;
 function scheduleOneDriveSettingsSync(){
@@ -669,7 +701,7 @@ function scheduleOneDriveSettingsSync(){
    whenever a payload happened to omit it, while the OneDrive path preserved it. */
 const SETTINGS_KEYS = ['materials','processRates','stockAllowance','defaultMargin','currency',
   'companyLogo','eSignature','brandColor','headerColor','pdfColumns','pdfAutoHide',
-  'marginDisplayMode','lastQuoteSeq'];
+  'marginDisplayMode','lastQuoteSeq','settingsSavedAt'];
 
 function settingsPayload(extra){
   const out = {};
@@ -696,23 +728,30 @@ function mergeSettings(saved){
     pdfAutoHide: (saved.pdfAutoHide !== undefined) ? saved.pdfAutoHide : state.pdfAutoHide,
     marginDisplayMode: saved.marginDisplayMode || state.marginDisplayMode,
     oneDriveFolder: saved.oneDriveFolder || state.oneDriveFolder,
-    lastQuoteSeq: saved.lastQuoteSeq ?? state.lastQuoteSeq
+    lastQuoteSeq: saved.lastQuoteSeq ?? state.lastQuoteSeq,
+    settingsSavedAt: saved.settingsSavedAt || state.settingsSavedAt
   });
 }
 
+async function writeLocalSettings(){
+  if(!localSettingsStore) return;
+  try{ await localSettingsStore.set(JSON.stringify(settingsPayload({includeFolder:true}))); }
+  catch(err){ console.warn('Local settings save failed', err); }
+}
+
+// Every Rate Master / branding edit comes through here. The timestamp is what lets a later
+// session tell whether this browser or OneDrive holds the newer settings.
 async function saveSettings(){
-  if(storageAvailable){
-    try{ await window.storage.set(STORAGE_KEY, JSON.stringify(settingsPayload({includeFolder:true})), false); }
-    catch(err){ console.warn('Settings save failed', err); }
-  }
+  state.settingsSavedAt = new Date().toISOString();
+  await writeLocalSettings();
   scheduleOneDriveSettingsSync();
 }
 
 async function loadSettings(){
-  if(!storageAvailable) return;
+  if(!localSettingsStore) return;
   try{
-    const res = await window.storage.get(STORAGE_KEY, false);
-    if(res && res.value) mergeSettings(JSON.parse(res.value));
+    const raw = await localSettingsStore.get();
+    if(raw) mergeSettings(JSON.parse(raw));
   }catch(err){ /* no saved settings yet — use defaults */ }
 }
 
@@ -740,6 +779,12 @@ function esc(v){
     .replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 function roundUpTo10(v){ return Math.ceil(v/10)*10; }
+// Today's date in the user's own time zone. toISOString() is UTC, so between midnight and
+// 05:30 IST it gave yesterday's date to every new quote.
+function todayISO(d){
+  d = d || new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
 const QUOTE_PREFIX = 'JMC-QT-';
 function nextQuoteNumber(){
   const n = (state.lastQuoteSeq && state.lastQuoteSeq >= 101) ? state.lastQuoteSeq + 1 : 101;
@@ -755,11 +800,35 @@ function formatMargin(margin, marginPct){
   if(state.marginDisplayMode==='percent') return marginPct+'%';
   return fmt(margin)+` (${marginPct}%)`;
 }
+/* Text colour for anything drawn on the table/header colour. The header text used to be a
+   fixed near-white, so picking a light "Table / header color" made every column heading
+   vanish — on screen and in the PDF. Pick whichever of light/dark text contrasts more
+   (WCAG relative luminance), so any colour the picker allows stays readable. */
+const HEADER_TEXT_LIGHT = [231,233,236];
+const HEADER_TEXT_DARK  = [27,33,40];
+function relLuminance(rgb){
+  const [r,g,b] = rgb.map(v=>{ v/=255; return v<=0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4); });
+  return 0.2126*r + 0.7152*g + 0.0722*b;
+}
+function contrastRatio(a, b){
+  const la = relLuminance(a), lb = relLuminance(b);
+  return (Math.max(la,lb)+0.05) / (Math.min(la,lb)+0.05);
+}
+function headerTextRgb(bgHex){
+  const bg = hexToRgb(bgHex);
+  return contrastRatio(bg, HEADER_TEXT_LIGHT) >= contrastRatio(bg, HEADER_TEXT_DARK)
+    ? HEADER_TEXT_LIGHT : HEADER_TEXT_DARK;
+}
 function applyBrandColor(){
-  document.documentElement.style.setProperty('--brass', state.brandColor);
-  document.documentElement.style.setProperty('--brass-dark', shade(state.brandColor, -0.28));
-  document.documentElement.style.setProperty('--brass-light', shade(state.brandColor, 0.35));
-  document.documentElement.style.setProperty('--header-bg', state.headerColor);
+  const root = document.documentElement.style;
+  root.setProperty('--brass', state.brandColor);
+  root.setProperty('--brass-dark', shade(state.brandColor, -0.28));
+  root.setProperty('--brass-light', shade(state.brandColor, 0.35));
+  root.setProperty('--header-bg', state.headerColor);
+  const fg = headerTextRgb(state.headerColor);
+  const onDark = fg === HEADER_TEXT_LIGHT;
+  root.setProperty('--header-fg', 'rgb('+fg.join(',')+')');
+  root.setProperty('--header-line', onDark ? 'rgba(255,255,255,.12)' : 'rgba(0,0,0,.14)');
 }
 
 /* ================= RATE CONTEXT ================= */
@@ -1413,7 +1482,7 @@ document.getElementById('exportPdfBtn').addEventListener('click', async ()=>{
   const pname = document.getElementById('qPartName').value || '-';
   const cust = document.getElementById('qCustomer').value || '-';
   const oper = document.getElementById('qOperation').value || '-';
-  const dt = document.getElementById('qDate').value || new Date().toISOString().slice(0,10);
+  const dt = document.getElementById('qDate').value || todayISO();
   const valDays = document.getElementById('qValidity').value || 15;
   doc.text(`Quote No: ${qn}      Date: ${dt}      Validity: ${valDays} days`, margin, y); y+=14;
   doc.text(`Part No: ${pn}      Part Name: ${pname}      Operation: ${oper}`, margin, y); y+=14;
@@ -1446,7 +1515,7 @@ document.getElementById('exportPdfBtn').addEventListener('click', async ()=>{
     const c = computePart(p);
     const row = [idx+1, p.partNo!=null?p.partNo:'-'];
     if(showPhoto) row.push('');
-    row.push(p.description||'-', p.qty);
+    row.push(p.description||'-', c.qty);   // blank Qty is costed as 1; print what was costed
     activeCols.forEach(cc=>{
       const val = cc.key==='rmCost' ? c.rmCost : c.procVals[cc.key];
       row.push(val ? val.toFixed(0) : '-');
@@ -1479,7 +1548,7 @@ document.getElementById('exportPdfBtn').addEventListener('click', async ()=>{
     },
     theme: 'grid',
     styles:{fontSize:9, cellPadding:4, font:'helvetica', minCellHeight: showPhoto?42:0, lineWidth:0.4, lineColor:[224,218,204]},
-    headStyles:{fillColor:[hr,hg,hb], textColor:[240,240,240], fontStyle:'bold', lineColor:[hr,hg,hb]},
+    headStyles:{fillColor:[hr,hg,hb], textColor:headerTextRgb(state.headerColor).slice(), fontStyle:'bold', lineColor:[hr,hg,hb]},
     alternateRowStyles:{fillColor:[248,246,240]},
     columnStyles: showPhoto ? {1:{cellWidth:50}, 2:{cellWidth:46}, 3:{cellWidth:120}} : {1:{cellWidth:50}, 2:{cellWidth:150}},
     didDrawCell: (data)=>{
@@ -1504,9 +1573,9 @@ document.getElementById('exportPdfBtn').addEventListener('click', async ()=>{
   });
 
   let finalY = doc.lastAutoTable.finalY + 16;
-  if(state.extraItems.length){
+  const exBody = extraChargeRows();
+  if(exBody.length){
     doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(30,30,30); doc.text('Additional Charges', margin, finalY); finalY += 4;
-    const exBody = state.extraItems.filter(e=>e.description).map(e=>[e.description, String(Math.round(num(e.amount)))]);
     doc.autoTable({ body: exBody, startY: finalY+4, margin:{left:margin,right:margin}, tableWidth: usableWidth/2,
       styles:{fontSize:9.5, cellPadding:4, lineWidth:0.4, lineColor:[224,218,204]}, theme:'grid',
       columnStyles:{1:{halign:'right', cellWidth:110}} });
@@ -1595,7 +1664,7 @@ document.getElementById('exportXlsxBtn').addEventListener('click', ()=>{
     rows.push([
       idx+1, p.partNo!=null?p.partNo:'', p.description, p.shape, p.shape==='standard'?'—':(mat.name||''),
       p.shape==='round'?num(p.dia):'', p.shape==='block'?num(p.t):'', p.shape==='block'?num(p.w):'', (p.shape!=='standard')?num(p.l):'',
-      num(p.qty), Number(c.weight.toFixed(4)), p.shape==='standard'?'':mat.rate, Number(c.rmCost.toFixed(2)),
+      c.qty, c.weight, p.shape==='standard'?'':mat.rate, c.rmCost,
       ...PROC_COLS.map(pc=>Number(c.procVals[pc.key].toFixed(2))),
       Number(c.sum.toFixed(2)), c.marginPct, Number(c.margin.toFixed(2)), Number(c.subTotal.toFixed(2)), Number(c.lineTotal.toFixed(2)),
       p.image ? 'Photo attached — see PDF export' : ''
@@ -1620,7 +1689,13 @@ document.getElementById('exportXlsxBtn').addEventListener('click', ()=>{
     const r = dataStartRow + i;
     const c = computePart(p);
     const rmCell = L(col.rm, r);
-    ws[rmCell] = {t:'n', v:Number(c.rmCost.toFixed(2)), f:`${L(col.wt,r)}*${L(col.rate,r)}`};
+    // Weight x rate only for stock that has a weight. A Std/BOP part's RM Cost IS its unit
+    // price; giving it the formula made Excel recalculate every bought-out part to 0.
+    if(p.shape !== 'standard'){
+      ws[rmCell] = {t:'n', v:c.rmCost, f:`${L(col.wt,r)}*${L(col.rate,r)}`, z:'0.00'};
+    }
+    // Full-precision weight (displayed to 4 places) so Excel's weight x rate matches the app.
+    ws[L(col.wt, r)] = {t:'n', v:c.weight, z:'0.0000'};
     const procFirstCell = L(col.procStart, r);
     const procLastCell = L(col.procStart+procCount-1, r);
     const sumCell = L(sumCol, r);
@@ -1736,8 +1811,17 @@ document.getElementById('signOutBtn').addEventListener('click', async ()=>{
 function oneDriveFolderName(){
   return (state.oneDriveFolder || 'JMC Quotations').trim() || 'JMC Quotations';
 }
+// The folder name is kept in this browser only (it has to be known before the settings file
+// inside it can be read). It used to go to window.storage alone, which the deployed site does
+// not have, so a custom folder name was forgotten on every visit and the app quietly read
+// and wrote a different folder: rates and saved quotes seemed to vanish.
 document.getElementById('oneDriveFolderInput').addEventListener('input', e=>{
-  state.oneDriveFolder = e.target.value; saveSettings();
+  state.oneDriveFolder = e.target.value; writeLocalSettings();
+});
+document.getElementById('oneDriveFolderInput').addEventListener('change', ()=>{
+  oneDriveSettingsState = 'unknown';
+  loadSettingsFromOneDrive();
+  refreshSavedQuotesList();
 });
 
 async function getGraphToken(interactive){
@@ -1904,6 +1988,12 @@ function applySettingsPayload(saved){
 
 async function saveSettingsToOneDrive(){
   if(!msalInstance || !msalInstance.getAllAccounts().length) return; // gate isn't passed yet
+  if(oneDriveSettingsState !== 'ready'){
+    // Never upload blind. Read OneDrive first; if this browser's edits are newer, that read
+    // schedules the upload itself, and if the read fails nothing is overwritten.
+    await loadSettingsFromOneDrive();
+    return;
+  }
   try{
     const token = await getGraphToken(false);
     await ensureOneDriveFolder(token);
@@ -1914,14 +2004,45 @@ async function saveSettingsToOneDrive(){
     setStoragePill('Rate sync FAILING \u2014 use "Sync settings now"', 'error');
   }
 }
+/* Read _settings.json and reconcile it with this browser's copy: whichever was edited more
+   recently wins. Errors used to be swallowed here, leaving the session on default rates with
+   nothing to say so, and the next edit then uploaded those defaults over the saved ones. */
 async function loadSettingsFromOneDrive(){
+  const failed = (why)=>{
+    console.warn('settings load failed', why);
+    oneDriveSettingsState = 'failed';
+    setStoragePill('Rates NOT loaded from OneDrive \u2014 using this browser\u2019s copy', 'error');
+    return false;
+  };
+  let res;
   try{
     const token = await getGraphToken(false);
     const folder = oneDriveFolderName();
     const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(folder)}/_settings.json:/content`;
-    const res = await fetch(url, {headers:{Authorization:`Bearer ${token}`}});
-    if(res.ok){ applySettingsPayload(await res.json()); }
-  }catch(err){ /* no settings saved to OneDrive yet — keep current defaults */ }
+    res = await fetch(url, {headers:{Authorization:`Bearer ${token}`}});
+  }catch(err){ return failed(err); }
+  if(res.status === 404){
+    // Nothing saved in this folder yet: this browser's settings become the saved ones.
+    oneDriveSettingsState = 'ready';
+    if(state.settingsSavedAt) scheduleOneDriveSettingsSync();
+    return true;
+  }
+  if(!res.ok) return failed('status '+res.status);
+  let remote;
+  try{ remote = await res.json(); }catch(err){ return failed(err); }
+  oneDriveSettingsState = 'ready';
+  const localAt = Date.parse(state.settingsSavedAt || '') || 0;
+  const remoteAt = Date.parse((remote && remote.settingsSavedAt) || '') || 0;
+  if(localAt > remoteAt){
+    // Edited in this browser after OneDrive last heard about it (e.g. while offline): push it.
+    scheduleOneDriveSettingsSync();
+    setStoragePill('Rates: this browser is newer \u2014 syncing', 'ok');
+  } else {
+    applySettingsPayload(remote);
+    await writeLocalSettings();
+    setStoragePill('Rates loaded from OneDrive', 'ok');
+  }
+  return true;
 }
 document.getElementById('syncSettingsBtn').addEventListener('click', async ()=>{
   const btn = document.getElementById('syncSettingsBtn');
@@ -1930,6 +2051,9 @@ document.getElementById('syncSettingsBtn').addEventListener('click', async ()=>{
     const token = await getGraphToken(true);
     await ensureOneDriveFolder(token);
     await uploadJsonToOneDrive(token, '_settings.json', settingsPayload());
+    // An explicit push: this browser's settings are now the saved ones.
+    oneDriveSettingsState = 'ready';
+    setStoragePill('Rates synced ' + new Date().toLocaleTimeString('en-IN'), 'ok');
     document.getElementById('oneDriveStatusNote').textContent = 'Settings synced to OneDrive just now.';
   }catch(err){
     alert(err.code==='NOT_SIGNED_IN' ? 'Sign in with Microsoft first (top right).' : 'Could not sync settings: '+err.message);
@@ -1966,6 +2090,13 @@ function quoteFilePayload(){
   d.ratesSavedAt = state.quoteRatesLinked ? d.savedAt : (state.quoteRatesSavedAt || d.savedAt);
   d.grandTotal = quoteGrandTotal();
   return d;
+}
+// Extra line items as printed. A row with an amount but no description used to be left out
+// of the PDF table while still counted in the Grand Total, so the total didn't add up.
+function extraChargeRows(){
+  return state.extraItems
+    .filter(e=>(e.description||'').trim() || Math.round(num(e.amount)))
+    .map(e=>[(e.description||'').trim() || 'Additional charge', String(Math.round(num(e.amount)))]);
 }
 function quoteGrandTotal(){
   return state.parts.reduce((s,p)=>s+computePart(p).lineTotal,0)
@@ -2011,7 +2142,7 @@ function startNewQuote(){
   document.getElementById('qPartName').value = '';
   document.getElementById('qOperation').value = '';
   document.getElementById('qCustomer').value = '';
-  document.getElementById('qDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('qDate').value = todayISO();
   setQuoteMargin(state.defaultMargin);
   document.getElementById('qValidity').value = 15;
   renderQuoteStatus();
@@ -2128,6 +2259,17 @@ let autosaveInFlight = false;
 let lastAutosavePayload = null;   // skip uploads when nothing actually changed
 let autosaveFailures = 0;
 let autosaveWarned = false;
+
+// Header pill showing where Rate Master settings stand. Called since the rate-snapshot
+// change but never defined, so sign-in crashed in bootApp: the Rate Master never rendered
+// and the OneDrive settings were never loaded.
+function setStoragePill(text, mode){
+  const pill = document.getElementById('storagePill');
+  if(!pill) return;
+  pill.textContent = text;
+  pill.classList.toggle('signed', mode === 'ok');
+  pill.classList.toggle('storage-off', mode === 'error');
+}
 
 function setAutosaveStatus(text, mode){
   const dot = document.getElementById('autosaveDot');
@@ -2359,13 +2501,13 @@ async function bootApp(){
   const storageNote = document.getElementById('storageNote');
   if(storageAvailable){
     await loadSettings();
-    setStoragePill('Settings auto-save: local + OneDrive');
-    storageNote.textContent = 'Logo, rates and PDF choices are kept in this browser and synced to your OneDrive folder whenever you are signed in.';
+    setStoragePill('Settings auto-save: browser + OneDrive');
+    storageNote.textContent = 'Logo, rates and PDF choices are kept in this browser and synced to your OneDrive folder whenever you are signed in. If OneDrive can\u2019t be reached, the copy in this browser is used and nothing in OneDrive is overwritten.';
   } else {
     setStoragePill('Settings auto-save: OneDrive');
     storageNote.textContent = "You're signed in, so settings and quotes save to your OneDrive folder. A crash-recovery copy of the quote you're editing is also kept automatically.";
   }
-  document.getElementById('qDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('qDate').value = todayISO();
   const qnField = document.getElementById('qQuoteNo');
   if(!qnField.value){ qnField.value = nextQuoteNumber(); }
   if(!state.parts.length){ state.parts.push(newPart(), newPart()); }

@@ -83,5 +83,36 @@ const d = c.collectQuoteData();
 ok('rates snapshot is embedded', !!(d.rates && d.rates.materials.length && d.rates.stockAllowance !== undefined));
 ok('snapshot is a copy, not a reference', d.rates.materials !== state.materials);
 
+console.log('\n10. Table header text stays readable on any header colour');
+const { headerTextRgb, contrastRatio, hexToRgb } = c;
+const dark = [27,33,40];
+ok('default dark header keeps light text', JSON.stringify(headerTextRgb('#1b2128')) !== JSON.stringify(dark));
+ok('white header gets dark text', JSON.stringify(headerTextRgb('#ffffff')) === JSON.stringify(dark));
+ok('yellow header gets dark text', JSON.stringify(headerTextRgb('#ffe600')) === JSON.stringify(dark));
+const worst = ['#000000','#ffffff','#ffe600','#7f8c99','#808080','#003393','#e8eef7','#00ff00','#ff0000','#1b2128']
+  .map(h=>contrastRatio(hexToRgb(h), headerTextRgb(h)));
+ok('every sampled colour gets at least 4:1 contrast', Math.min(...worst) >= 4, `min ${Math.min(...worst).toFixed(2)}`);
+
+console.log('\n11. Quote date is the local date, not UTC');
+// 00:30 local time on 29 Sep: toISOString() would have said the 28th anywhere east of UTC.
+ok('just after midnight is still today', c.todayISO(new Date(2026, 8, 29, 0, 30)) === '2026-09-29');
+ok('zero-padded month and day', c.todayISO(new Date(2026, 0, 5, 12)) === '2026-01-05');
+
+console.log('\n12. PDF extra charges add up to the Grand Total');
+state.extraItems = [{description:'Design Costing', amount:3000}, {description:'', amount:1200}, {description:'', amount:0}];
+const rows = c.extraChargeRows();
+ok('an amount with no description is still printed', rows.length === 2 && rows[1][1] === '1200', JSON.stringify(rows));
+ok('printed extras sum to the extras total',
+   rows.reduce((s,r)=>s+Number(r[1]),0) === state.extraItems.reduce((s,e)=>s+Math.round(e.amount),0));
+
+console.log('\n13. Settings carry an edit timestamp; folder name stays local');
+state.settingsSavedAt = '2026-09-29T10:00:00.000Z';
+const sp = c.settingsPayload();
+ok('payload carries settingsSavedAt', sp.settingsSavedAt === '2026-09-29T10:00:00.000Z');
+ok('folder name is not synced to OneDrive', !('oneDriveFolder' in sp));
+ok('folder name is kept in the local copy', 'oneDriveFolder' in c.settingsPayload({includeFolder:true}));
+c.mergeSettings({materials: state.materials});   // an old settings file with no timestamp
+ok('merging an old file keeps the local timestamp', state.settingsSavedAt === '2026-09-29T10:00:00.000Z');
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

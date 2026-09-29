@@ -28,6 +28,6 @@ const b = html.lastIndexOf('<script>'), e = html.lastIndexOf('</script>');
 vm.createContext(ctx);
 // const/let stay in the script's lexical scope and never land on the context object,
 // so ask the script itself to hand them out.
-const src = html.slice(b+8, e) + "\n;globalThis.__x = {state, PROC_COLS, computePart, activeRates, cloneRates, masterRatesView, num, roundUpTo10, esc, collectQuoteData, quoteGrandTotal};";
+const src = html.slice(b+8, e) + "\n;globalThis.__x = {state, PROC_COLS, computePart, activeRates, cloneRates, masterRatesView, num, roundUpTo10, esc, collectQuoteData, quoteGrandTotal, todayISO, extraChargeRows, mergeSettings, settingsPayload, headerTextRgb, contrastRatio, hexToRgb};";
 vm.runInContext(src, ctx, {filename:'app.js'});
 module.exports = ctx.__x;
