@@ -28,14 +28,16 @@ const SETTINGS = {
     { id: 'OHNS', name: 'OHNS', rate: 150, density: 7.85, htRate: 90 },
   ],
   processRates: defaultProcessRates(), stockAllowance: 5, defaultMargin: 18, currency: '₹', lastQuoteSeq: 120,
+  companyLogo: 'data:image/png;base64,LOGO', brandColor: '#003393', pdfColumns: { photo: false },
+  settingsSavedAt: '2026-10-01T09:00:00.000Z',
 };
 
 before(async () => {
   ms = await startMockMicrosoft({ tenant: TENANT, clientId: CLIENT_ID, clientSecret: CLIENT_SECRET });
-  ms.state.files.set(`${FOLDER}/_settings.json`, JSON.stringify(SETTINGS));
-  ms.state.files.set(`${FOLDER}/JMC-QT-140.json`, JSON.stringify({ quoteNo: 'JMC-QT-140', customer: 'Rane Group', parts: [], extraItems: [], status: 'Sent' }));
-  ms.state.files.set(`${FOLDER}/EW-2900.json`, JSON.stringify({ quoteNo: 'EW-2900', customer: 'TVS', parts: [], extraItems: [] }));
-  ms.state.files.set(`${FOLDER}/_index.json`, JSON.stringify({ version: 1, quotes: {
+  ms.state.setFile(`${FOLDER}/_settings.json`, JSON.stringify(SETTINGS));
+  ms.state.setFile(`${FOLDER}/JMC-QT-140.json`, JSON.stringify({ quoteNo: 'JMC-QT-140', customer: 'Rane Group', parts: [], extraItems: [], status: 'Sent' }));
+  ms.state.setFile(`${FOLDER}/EW-2900.json`, JSON.stringify({ quoteNo: 'EW-2900', customer: 'TVS', parts: [], extraItems: [] }));
+  ms.state.setFile(`${FOLDER}/_index.json`, JSON.stringify({ version: 1, quotes: {
     'JMC-QT-140.json': { quoteNo: 'JMC-QT-140', customer: 'Rane Group', status: 'Sent', grandTotal: 12000, savedAt: '2026-09-01T00:00:00Z' } } }));
 
   persistDir = mkdtempSync(join(tmpdir(), 'jmc-connector-'));
@@ -161,12 +163,12 @@ test('a non-JMC Microsoft account is refused', async () => {
   assert.equal(r.tokens, undefined);
 });
 
-test('MCP: initialize and the six tools', async () => {
+test('MCP: initialize and the seven tools', async () => {
   const init = await mcp(session.tokens.access_token, 'initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } });
   assert.equal(init.result.serverInfo.name, 'jmc-quote-engine');
   const list = await mcp(session.tokens.access_token, 'tools/list', {});
   assert.deepEqual(list.result.tools.map((t) => t.name).sort(),
-    ['get_quote', 'get_rate_master', 'list_quotes', 'price_quote', 'save_quote', 'update_quote_status']);
+    ['get_quote', 'get_rate_master', 'list_quotes', 'price_quote', 'save_quote', 'update_quote_status', 'update_rate_master']);
   const save = list.result.tools.find((t) => t.name === 'save_quote');
   assert.equal(save.annotations.destructiveHint, true);
 });
@@ -245,6 +247,124 @@ test('list_quotes, get_quote, update_quote_status', async () => {
   // Changing status never re-prices: grand total in the file is unchanged.
   const again = await call(session.tokens.access_token, 'get_quote', { quoteNo: savedNo });
   assert.equal(again.json.grandTotal, got.json.grandTotal);
+});
+
+const settingsNow = () => JSON.parse(ms.state.files.get(`${FOLDER}/_settings.json`));
+
+test('update_rate_master: preview by default, nothing written', async () => {
+  const puts = ms.state.puts.length;
+  const r = await call(session.tokens.access_token, 'update_rate_master', { materials: [{ name: 'MS', ratePerKg: 110 }] });
+  assert.equal(r.isError, false, r.text);
+  assert.match(r.text, /PREVIEW/);
+  assert.match(r.text, /MS rate: ₹95\/kg -> ₹110\/kg/);
+  assert.equal(ms.state.puts.length, puts);
+  assert.equal(settingsNow().materials[0].rate, 95);
+});
+
+test('update_rate_master: apply changes rates, keeps every other setting, saved quotes keep their price', async () => {
+  const quoteTotalBefore = (await call(session.tokens.access_token, 'get_quote', { quoteNo: savedNo })).json.grandTotal;
+  const before = settingsNow();
+  const r = await call(session.tokens.access_token, 'update_rate_master', {
+    materials: [{ name: 'ms', ratePerKg: 110 }, { name: 'EN8', ratePerKg: 120, heatTreatmentRatePerKg: 70 }],
+    processes: [{ process: 'Wire Cut', mode: 'auto', autoRatePerKg: 40 }],
+    defaultMarginPercent: 20, apply: true,
+  });
+  assert.equal(r.isError, false, r.text);
+  assert.match(r.text, /Saved to the Rate Master/);
+  const after = settingsNow();
+  assert.equal(after.materials.find((m) => m.name === 'MS').rate, 110);
+  assert.equal(after.materials.find((m) => m.name === 'EN8').htRate, 70);
+  assert.deepEqual(after.processRates.wireCut, { mode: 'auto', rate: 40 });
+  assert.equal(after.defaultMargin, 20);
+  for (const k of ['companyLogo', 'brandColor', 'pdfColumns', 'lastQuoteSeq', 'stockAllowance']) assert.deepEqual(after[k], before[k], k + ' preserved');
+  assert.ok(Date.parse(after.settingsSavedAt) > Date.parse(before.settingsSavedAt), 'stamped newer so the app takes it');
+  assert.ok(!('oneDriveFolder' in after));
+  // New quotes use the new rates; the saved quote keeps its stored ones.
+  const rm = (await call(session.tokens.access_token, 'get_rate_master')).json;
+  assert.equal(rm.materials.find((m) => m.name === 'MS').ratePerKg, 110);
+  assert.equal((await call(session.tokens.access_token, 'get_quote', { quoteNo: savedNo })).json.grandTotal, quoteTotalBefore);
+  const again = await call(session.tokens.access_token, 'update_rate_master', { materials: [{ name: 'MS', ratePerKg: 110 }], apply: true });
+  assert.match(again.text, /Nothing to change/);
+});
+
+test('update_rate_master: a save that lands in between is kept, not overwritten', async () => {
+  // Someone saves the Rate Master (e.g. the web app) right after the connector reads it.
+  ms.state.onMeta = (key) => {
+    const s = JSON.parse(ms.state.files.get(key));
+    s.stockAllowance = 6; s.settingsSavedAt = new Date().toISOString();
+    ms.state.setFile(key, JSON.stringify(s));
+  };
+  const r = await call(session.tokens.access_token, 'update_rate_master', { materials: [{ name: 'OHNS', ratePerKg: 160 }], apply: true });
+  assert.equal(r.isError, false, r.text);
+  const after = settingsNow();
+  assert.equal(after.stockAllowance, 6, 'their change survived');
+  assert.equal(after.materials.find((m) => m.name === 'OHNS').rate, 160, 'ours applied on top');
+});
+
+test('update_rate_master: refuses bad changes', async () => {
+  const t = session.tokens.access_token;
+  assert.match((await call(t, 'update_rate_master', { processes: [{ process: 'HT', autoRatePerKg: 5 }], apply: true })).text, /per material/);
+  assert.match((await call(t, 'update_rate_master', { materials: [{ name: 'Brass' }], apply: true })).text, /new material: give its ratePerKg/);
+  assert.match((await call(t, 'update_rate_master', { removeMaterials: ['Unobtainium'], apply: true })).text, /no such material/);
+  assert.match((await call(t, 'update_rate_master', { processes: [{ process: 'laser', mode: 'auto' }] })).text, /Unknown process/);
+});
+
+test('a web app tab left open does not overwrite a Rate Master change made from Claude', { skip: !playwrightPath() && 'Playwright not installed' }, async () => {
+  const { chromium } = await import(playwrightPath());
+  let remote = JSON.stringify({ ...settingsNow(), materials: settingsNow().materials.map((m) => (m.id === 'MS' ? { ...m, rate: 100 } : m)), settingsSavedAt: '2026-10-02T00:00:00.000Z' });
+  const appPuts = [];
+  const b = await chromium.launch();
+  try {
+    const ctx = await b.newContext();
+    await ctx.addInitScript(() => {
+      const acct = { username: 'estimator@jmcengg.com' };
+      window.msal = { PublicClientApplication: function () { return { getAllAccounts: () => [acct], acquireTokenSilent: async () => ({ accessToken: 't' }) }; } };
+      window.__alerts = []; window.alert = (m) => window.__alerts.push(m); window.confirm = () => false;
+    });
+    await ctx.route(/^https?:\/\//, async (r) => {
+      const req = r.request(); const u = new URL(req.url());
+      if (u.host !== 'graph.microsoft.com') return r.abort();
+      const path = decodeURIComponent(u.pathname);
+      if (path.endsWith('/_settings.json:/content')) {
+        if (req.method() === 'PUT') { appPuts.push(req.postData()); remote = req.postData(); return r.fulfill({ status: 200, body: '{}', contentType: 'application/json' }); }
+        return r.fulfill({ status: 200, body: remote, contentType: 'application/json' });
+      }
+      if (path.endsWith(':/content')) return r.fulfill({ status: 404, body: '{}' });
+      if (path.endsWith(':/children')) return r.fulfill({ status: 200, body: '{"value":[]}', contentType: 'application/json' });
+      return r.fulfill({ status: req.method() === 'DELETE' ? 204 : 200, body: '{}', contentType: 'application/json' });
+    });
+    const p = await ctx.newPage();
+    const errors = []; p.on('pageerror', (e) => errors.push(e.message));
+    await p.goto('file://' + join(here, '..', '..', 'index.html'));
+    await p.waitForFunction(() => document.querySelectorAll('#materialsTable tbody tr').length > 0);
+    await p.waitForTimeout(500);
+    const msRate = () => p.evaluate(() => state.materials.find((m) => m.id === 'MS').rate);
+    assert.equal(await msRate(), 100, 'tab loaded the Rate Master as it was');
+
+    // Claude changes MS to 125 while the tab stays open.
+    const r = await call(session.tokens.access_token, 'update_rate_master', { materials: [{ name: 'MS', ratePerKg: 125 }], apply: true });
+    assert.equal(r.isError, false, r.text);
+    remote = ms.state.files.get(`${FOLDER}/_settings.json`);
+
+    // Now someone edits a different rate in that old tab.
+    const editSecondRate = (v) => p.evaluate((v) => { const i = document.querySelectorAll('#materialsTable input[data-f="rate"]')[1]; i.value = v; i.dispatchEvent(new Event('input')); }, v);
+    await editSecondRate(175);
+    await p.waitForTimeout(2500);
+    assert.equal(appPuts.length, 0, 'the stale tab did not upload over Claude\'s change');
+    assert.equal(JSON.parse(remote).materials.find((m) => m.id === 'MS').rate, 125);
+    assert.equal(await msRate(), 125, 'the tab picked up Claude\'s rate');
+    const alerts = await p.evaluate(() => window.__alerts);
+    assert.ok(alerts.some((a) => /changed elsewhere/.test(a)), JSON.stringify(alerts));
+
+    // With the tab now current, the next edit saves normally and keeps Claude's MS rate.
+    await editSecondRate(180);
+    await p.waitForTimeout(2500);
+    assert.equal(appPuts.length, 1);
+    const saved = JSON.parse(remote);
+    assert.equal(saved.materials.find((m) => m.id === 'MS').rate, 125);
+    assert.equal(saved.materials[1].rate, 180);
+    assert.deepEqual(errors, []);
+  } finally { await b.close(); }
 });
 
 test('refresh renews the Microsoft token too; a revoked one forces reconnect', async () => {

@@ -192,3 +192,97 @@ export function indexEntryFor(q) {
 
 function round2(v) { return Math.round(v * 100) / 100; }
 function round3(v) { return Math.round(v * 1000) / 1000; }
+
+/**
+ * Apply Rate Master changes to the app's _settings.json content. Only the rate fields are
+ * touched; logo, signature, colours, PDF columns and the quote counter are carried over as-is.
+ * `settingsSavedAt` is stamped so the web app treats this as the newest Rate Master.
+ * Returns { settings, changes } where changes are human-readable lines. Throws QuoteInputError.
+ */
+export function applyRateMasterChanges(rawSettings, input, now = new Date()) {
+  const settings = JSON.parse(JSON.stringify(rawSettings || {}));
+  const master = rateMasterFrom(settings);
+  const materials = JSON.parse(JSON.stringify(master.materials));
+  const processRates = JSON.parse(JSON.stringify(master.processRates));
+  const changes = [];
+  const money = (v) => `₹${v}`;
+  const check = (v, what, { min = 0, max = Infinity } = {}) => {
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < min || v > max) {
+      throw new QuoteInputError(`${what} must be a number${max < Infinity ? ` between ${min} and ${max}` : ` of at least ${min}`}.`);
+    }
+    return v;
+  };
+
+  for (const m of input.materials || []) {
+    const name = String(m.name || '').trim();
+    if (!name) throw new QuoteInputError('Every material change needs the material name.');
+    let mat = materials.find((x) => squash(x.id) === squash(name) || squash(x.name) === squash(name));
+    if (!mat) {
+      if (m.ratePerKg == null) throw new QuoteInputError(`"${name}" is a new material: give its ratePerKg (and densityGPerCm3 if not steel, 7.85).`);
+      const added = {
+        id: 'MAT-' + now.getTime() + '-' + (materials.length + 1), name,
+        rate: check(m.ratePerKg, `${name} ratePerKg`),
+        density: m.densityGPerCm3 == null ? 7.85 : check(m.densityGPerCm3, `${name} density`, { min: 0.1, max: 25 }),
+        htRate: m.heatTreatmentRatePerKg == null ? 0 : check(m.heatTreatmentRatePerKg, `${name} heatTreatmentRatePerKg`),
+        notes: m.notes == null ? '' : String(m.notes),
+      };
+      materials.push(added);
+      changes.push(`Added material ${name}: ${money(added.rate)}/kg, density ${added.density}, heat treatment ${money(added.htRate)}/kg`);
+      continue;
+    }
+    if (m.ratePerKg != null && m.ratePerKg !== mat.rate) {
+      changes.push(`${mat.name} rate: ${money(mat.rate)}/kg -> ${money(check(m.ratePerKg, `${mat.name} ratePerKg`))}/kg`);
+      mat.rate = m.ratePerKg;
+    }
+    if (m.densityGPerCm3 != null && m.densityGPerCm3 !== mat.density) {
+      changes.push(`${mat.name} density: ${mat.density} -> ${check(m.densityGPerCm3, `${mat.name} density`, { min: 0.1, max: 25 })} g/cm3`);
+      mat.density = m.densityGPerCm3;
+    }
+    if (m.heatTreatmentRatePerKg != null && m.heatTreatmentRatePerKg !== (mat.htRate || 0)) {
+      changes.push(`${mat.name} heat treatment: ${money(mat.htRate || 0)}/kg -> ${money(check(m.heatTreatmentRatePerKg, `${mat.name} heatTreatmentRatePerKg`))}/kg`);
+      mat.htRate = m.heatTreatmentRatePerKg;
+    }
+    if (m.notes != null && m.notes !== (mat.notes || '')) { mat.notes = String(m.notes); changes.push(`${mat.name} notes updated`); }
+  }
+
+  for (const name of input.removeMaterials || []) {
+    const i = materials.findIndex((x) => squash(x.id) === squash(name) || squash(x.name) === squash(name));
+    if (i < 0) throw new QuoteInputError(`Can't remove "${name}": no such material.`);
+    if (materials.length === 1) throw new QuoteInputError('That is the last material; add another before removing it.');
+    changes.push(`Removed material ${materials[i].name}`);
+    materials.splice(i, 1);
+  }
+
+  for (const p of input.processes || []) {
+    const key = resolveProcessKey(p.process || '');
+    if (!key) throw new QuoteInputError(`Unknown process "${p.process}". Processes are: ${PROC_COLS.map((c) => c.label).join(', ')}.`);
+    const label = PROC_COLS.find((c) => c.key === key).label;
+    const pr = processRates[key] || { mode: 'manual', rate: 0 };
+    if (p.mode && p.mode !== pr.mode) { changes.push(`${label}: ${pr.mode} -> ${p.mode}`); pr.mode = p.mode; }
+    if (p.autoRatePerKg != null) {
+      if (key === 'ht') throw new QuoteInputError('Heat treatment is priced per material: change heatTreatmentRatePerKg on the material instead.');
+      if (p.autoRatePerKg !== pr.rate) {
+        changes.push(`${label} auto rate: ${money(pr.rate)}/kg -> ${money(check(p.autoRatePerKg, `${label} autoRatePerKg`))}/kg`);
+        pr.rate = p.autoRatePerKg;
+      }
+    }
+    processRates[key] = pr;
+  }
+
+  if (input.stockAllowanceMm != null && input.stockAllowanceMm !== master.stockAllowance) {
+    changes.push(`Stock allowance: ${master.stockAllowance} mm -> ${check(input.stockAllowanceMm, 'stockAllowanceMm', { max: 100 })} mm`);
+    settings.stockAllowance = input.stockAllowanceMm;
+  }
+  if (input.defaultMarginPercent != null && input.defaultMarginPercent !== master.defaultMargin) {
+    changes.push(`Default margin: ${master.defaultMargin}% -> ${check(input.defaultMarginPercent, 'defaultMarginPercent', { max: 500 })}%`);
+    settings.defaultMargin = input.defaultMarginPercent;
+  }
+
+  settings.materials = materials;
+  settings.processRates = processRates;
+  if (settings.stockAllowance == null) settings.stockAllowance = master.stockAllowance;
+  if (settings.defaultMargin == null) settings.defaultMargin = master.defaultMargin;
+  settings.settingsSavedAt = now.toISOString();
+  delete settings.oneDriveFolder; // per-browser in the app; never synced
+  return { settings, changes };
+}

@@ -9,12 +9,15 @@ export function startMockMicrosoft({ tenant, clientId, clientSecret, pageSize = 
   const st = {
     signInAs: 'estimator@jmcengg.com',
     files: new Map(),         // "Folder/name.json" -> string
+    versions: new Map(),      // "Folder/name.json" -> number, the eTag
+    onMeta: null,             // one-shot hook run after an item's metadata is read (simulate a concurrent save)
     codes: new Map(),         // code -> { challenge, redirectUri, email }
     access: new Map(),        // access token -> email
     refresh: new Map(),       // refresh token -> email
     refreshCalls: 0,
     puts: [],
   };
+  st.setFile = (key, body) => { st.files.set(key, body); st.versions.set(key, (st.versions.get(key) || 0) + 1); };
   const issue = (email) => {
     const at = 'msat-' + randomUUID(), rt = 'msrt-' + randomUUID();
     st.access.set(at, email); st.refresh.set(rt, email);
@@ -58,6 +61,12 @@ export function startMockMicrosoft({ tenant, clientId, clientSecret, pageSize = 
       return send(res, 400, { error: 'unsupported_grant_type' });
     }
 
+    // Pre-authenticated download URLs (as Graph hands out) need no token.
+    if (path.startsWith('/download/')) {
+      const key = path.slice('/download/'.length);
+      return st.files.has(key) ? send(res, 200, st.files.get(key)) : send(res, 404, {});
+    }
+
     // ---- Graph: every call needs a live access token ----
     const email = st.access.get((req.headers.authorization || '').replace(/^Bearer /, ''));
     if (!email) return send(res, 401, { error: { code: 'InvalidAuthenticationToken' } });
@@ -70,9 +79,19 @@ export function startMockMicrosoft({ tenant, clientId, clientSecret, pageSize = 
       if (req.method === 'PUT') {
         const body = await readBody(req);
         if (u.searchParams.get('@microsoft.graph.conflictBehavior') === 'fail' && st.files.has(key)) return send(res, 409, { error: { code: 'nameAlreadyExists' } });
-        st.files.set(key, body); st.puts.push(key);
+        const ifMatch = req.headers['if-match'];
+        if (ifMatch && ifMatch !== `"v${st.versions.get(key)}"`) return send(res, 412, { error: { code: 'resourceModified' } });
+        st.setFile(key, body); st.puts.push(key);
         return send(res, 201, { name: m[2] });
       }
+    }
+    if ((m = path.match(/^\/v1\.0\/me\/drive\/root:\/([^/:]+)\/([^:]+)$/)) && req.method === 'GET') {
+      const key = `${m[1]}/${m[2]}`;
+      if (!st.files.has(key)) return send(res, 404, { error: { code: 'itemNotFound' } });
+      const meta = { name: m[2], eTag: `"v${st.versions.get(key)}"`,
+        '@microsoft.graph.downloadUrl': `http://127.0.0.1:${server.address().port}/download/${encodeURIComponent(key)}` };
+      if (st.onMeta) { const hook = st.onMeta; st.onMeta = null; hook(key); }
+      return send(res, 200, meta);
     }
     if ((m = path.match(/^\/v1\.0\/me\/drive\/root:\/([^/]+):\/children$/))) {
       const all = [...st.files.keys()].filter((k) => k.startsWith(m[1] + '/')).map((k) => ({ name: k.slice(m[1].length + 1), lastModifiedDateTime: new Date().toISOString() }));

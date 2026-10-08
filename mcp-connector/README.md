@@ -6,7 +6,7 @@ Cloudflare Worker (free plan is enough).
 
 - Prices with **the same costing code as the web app**: `npm run build` copies it out of
   `../index.html` (the block between `ENGINE-START` and `ENGINE-END`), so the two can't drift.
-- Reads the **Rate Master** from the app's `_settings.json`, and saves quotes into the **same
+- Reads and updates the **Rate Master** in the app's `_settings.json`, and saves quotes into the **same
   OneDrive folder** the app uses, so they appear under **Saved Quotes**. Load one there and
   use **Export PDF** for the customer copy.
 - Each person signs in with **their own JMC Microsoft account**; the connector works in their
@@ -17,13 +17,22 @@ Cloudflare Worker (free plan is enough).
 | Tool | What it does | Changes anything? |
 |---|---|---|
 | `get_rate_master` | Materials (₹/kg, density, HT rate), processes (Auto/Manual), stock allowance, default margin | No |
+| `update_rate_master` | Change material rates, density and HT rate; add or remove grades; set a process to Auto/Manual and its ₹/kg; stock allowance; default margin. **Previews first**; saves only when called with `apply: true`, after you confirm | Yes |
 | `list_quotes` | Saved quotes with customer, part name, status, total; search and status filter | No |
 | `get_quote` | One saved quote, priced with the rates stored in it | No |
 | `price_quote` | Full price breakdown for a proposed quote, **without saving** | No |
 | `save_quote` | Save a quote (next `JMC-QT-###` number, or one you give). Stores the rates it used, like the app. Won't replace an existing quote unless told to | Yes |
 | `update_quote_status` | Open / Sent / Won / Lost / On-Hold. Never re-prices | Yes |
 
-It never writes the Rate Master, never deletes anything, and never touches the app's crash-recovery file.
+It never deletes a quote and never touches the app's crash-recovery file. Rate Master changes:
+
+- touch only the rate fields; logo, signature, colours, PDF columns and the quote counter are kept;
+- apply to **new** quotes only. Saved quotes keep the rates stored in them, exactly as in the app;
+- are written with OneDrive's version check, so a save made at the same moment (in the app or
+  elsewhere) is kept, never overwritten;
+- are picked up by the web app on its next load. A web app tab that was already open finds out
+  before it next saves the Rate Master: it loads Claude's rates, warns that its own last edit was
+  not saved, and never overwrites them.
 
 Example requests:
 
@@ -32,6 +41,8 @@ Example requests:
 > Show me the breakdown first.
 
 > Which quotes for TVS are still Open? Mark JMC-QT-141 as Won.
+
+> MS has gone up to ₹92/kg and OHNS to ₹165. Add EN8 at ₹110/kg with heat treatment at ₹70/kg.
 
 ## One-time setup
 

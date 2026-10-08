@@ -34,18 +34,31 @@ export class OneDrive {
     return res.json();
   }
 
+  /** A JSON file plus its eTag (OneDrive's version stamp), or { data: null } when absent. */
+  async readJsonVersioned(name) {
+    const meta = await this.#fetch(`${this.fileUrl(name)}?$select=eTag,@microsoft.graph.downloadUrl`);
+    if (meta.status === 404) return { data: null, etag: null };
+    if (!meta.ok) throw new GraphError(`Could not read ${name} from OneDrive (status ${meta.status}).`, meta.status);
+    const item = await meta.json();
+    const res = await fetch(item['@microsoft.graph.downloadUrl']); // pre-authenticated, short-lived
+    if (!res.ok) throw new GraphError(`Could not download ${name} from OneDrive (status ${res.status}).`, res.status);
+    return { data: await res.json(), etag: item.eTag };
+  }
+
   /**
    * Upload a JSON file. With `mustNotExist`, OneDrive itself refuses to replace an existing
-   * file (409), so two quotes saved at the same moment can't take the same number.
+   * file (409), so two quotes saved at the same moment can't take the same number. With
+   * `ifMatch` (an eTag), OneDrive refuses if the file changed since it was read (412).
    */
-  async writeJson(name, data, { mustNotExist = false } = {}) {
+  async writeJson(name, data, { mustNotExist = false, ifMatch } = {}) {
     const body = JSON.stringify(data, null, 2);
     if (body.length > 4 * 1024 * 1024) throw new GraphError(`${name} is over OneDrive's 4 MB single-file limit.`, 413);
     const conflict = mustNotExist ? '?@microsoft.graph.conflictBehavior=fail' : '';
     const res = await this.#fetch(`${this.fileUrl(name)}:/content${conflict}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body,
+      method: 'PUT', headers: { 'Content-Type': 'application/json', ...(ifMatch ? { 'If-Match': ifMatch } : {}) }, body,
     });
     if (res.status === 409 && mustNotExist) throw new GraphError(`${name} already exists in OneDrive.`, 409);
+    if (res.status === 412) throw new GraphError(`${name} was changed in OneDrive while this update was being made.`, 412);
     if (!res.ok) throw new GraphError(`Could not save ${name} to OneDrive (status ${res.status}).`, res.status);
     return res.json();
   }

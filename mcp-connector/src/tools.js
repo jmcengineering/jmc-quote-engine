@@ -6,7 +6,7 @@ import { PROC_COLS } from './engine.generated.js';
 import { OneDrive, GraphError, SETTINGS_FILE } from './onedrive.js';
 import {
   STATUSES, QuoteInputError, rateMasterFrom, buildQuoteFile, priceQuote, indexEntryFor,
-  nextQuoteNo, isValidQuoteNo,
+  nextQuoteNo, isValidQuoteNo, applyRateMasterChanges,
 } from './quotes.js';
 
 const PROCESS_LIST = PROC_COLS.map((c) => `${c.key} (${c.label})`).join(', ');
@@ -76,6 +76,7 @@ export function createServer(env, user) {
       instructions:
         'JMC Engineering quotation tool (jigs, fixtures, press tools, plastic moulds). Prices use the company Rate Master ' +
         'and the same costing engine as the JMC Quote Engine web app. Workflow: get_rate_master for materials and processes, ' +
+        'update_rate_master to change rates (preview first, apply only after the user confirms), ' +
         'price_quote to show the user a breakdown, and save_quote only once they are happy with it. Saved quotes appear in ' +
         'the web app under Saved Quotes, where the user exports the customer PDF. Amounts are Indian rupees.',
     },
@@ -102,6 +103,52 @@ export function createServer(env, user) {
       }),
       onedriveFolder: env.ONEDRIVE_FOLDER || 'JMC Quotations',
     });
+  }));
+
+  server.registerTool('update_rate_master', {
+    title: 'Change the rate master',
+    description: 'Change Rate Master rates: material ₹/kg, density and heat-treatment ₹/kg (add new grades or remove one), process Auto/Manual mode and auto ₹/kg, stock allowance, default margin. ' +
+      'Without apply=true this only PREVIEWS the changes. Show the user the preview and get their confirmation, then call again with the same changes and apply=true. ' +
+      'Applied changes affect new quotes only: saved quotes keep the rates stored in them. Logo, signature, colours and other app settings are never touched.',
+    inputSchema: {
+      materials: z.array(z.object({
+        name: z.string().describe('Material grade, e.g. "MS". A name not in the Rate Master adds a new grade (needs ratePerKg).'),
+        ratePerKg: z.number().min(0).optional(),
+        densityGPerCm3: z.number().positive().optional().describe('Steel is 7.85'),
+        heatTreatmentRatePerKg: z.number().min(0).optional(),
+        notes: z.string().optional(),
+      })).optional(),
+      removeMaterials: z.array(z.string()).optional().describe('Grade names to remove. Confirm with the user first.'),
+      processes: z.array(z.object({
+        process: z.string().describe(`Process key or label: ${PROCESS_LIST}`),
+        mode: z.enum(['auto', 'manual']).optional().describe('auto = priced as weight x autoRatePerKg (rounded up to ₹10); manual = typed per part'),
+        autoRatePerKg: z.number().min(0).optional().describe('Not for heat treatment, which uses each material\'s heatTreatmentRatePerKg'),
+      })).optional(),
+      stockAllowanceMm: z.number().min(0).optional().describe('Added to every stock dimension before weighing'),
+      defaultMarginPercent: z.number().min(0).optional(),
+      apply: z.boolean().default(false).describe('false = preview only (default). true = save the changes to OneDrive.'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  }, ({ apply, ...changes }) => guarded(async () => {
+    // Read with OneDrive's version stamp and write back only if nobody saved in between;
+    // if someone did, start again from their version.
+    for (let attempt = 0; ; attempt++) {
+      const { data, etag } = await drive.readJsonVersioned(SETTINGS_FILE);
+      const { settings, changes: lines } = applyRateMasterChanges(data, changes);
+      if (!lines.length) return ok('Nothing to change: the Rate Master already has those values.');
+      if (!apply) {
+        return ok('PREVIEW, nothing saved yet. Confirm with the user, then call update_rate_master again with the same changes and apply=true.\n- ' + lines.join('\n- '));
+      }
+      try {
+        await drive.writeJson(SETTINGS_FILE, settings, etag ? { ifMatch: etag } : { mustNotExist: true });
+      } catch (err) {
+        if (err instanceof GraphError && (err.status === 412 || err.status === 409) && attempt < 2) continue;
+        throw err;
+      }
+      return ok('Saved to the Rate Master:\n- ' + lines.join('\n- ') +
+        '\nNew quotes use these rates now; saved quotes keep their own. Anyone with the web app open will get the new rates when they reload it ' +
+        '(an open tab that edits the Rate Master first is told the rates changed and reloads them instead of overwriting).');
+    }
   }));
 
   server.registerTool('list_quotes', {

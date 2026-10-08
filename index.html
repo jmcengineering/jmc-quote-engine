@@ -2002,6 +2002,22 @@ function applySettingsPayload(saved){
   renderBranding(); renderPartsMaterialOptions(); renderParts(); renderRateBanner();
 }
 
+/* The settingsSavedAt of the OneDrive copy this tab last read or wrote. The Rate Master has
+   more than one writer (other computers, and the Claude connector), so before uploading we
+   check that nobody changed it since: uploading this tab's whole Rate Master over a newer one
+   would silently undo their change. */
+let remoteSettingsAt = null;
+const stampOf = (v)=> Date.parse(v || '') || 0;
+
+async function fetchRemoteSettings(token){
+  const folder = oneDriveFolderName();
+  const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(folder)}/_settings.json:/content`;
+  const res = await fetch(url, {headers:{Authorization:`Bearer ${token}`}});
+  if(res.status === 404) return {status:404, remote:null};
+  if(!res.ok) return {status:res.status, remote:null};
+  return {status:200, remote: await res.json()};
+}
+
 async function saveSettingsToOneDrive(){
   if(!msalInstance || !msalInstance.getAllAccounts().length) return; // gate isn't passed yet
   if(oneDriveSettingsState !== 'ready'){
@@ -2012,8 +2028,22 @@ async function saveSettingsToOneDrive(){
   }
   try{
     const token = await getGraphToken(false);
+    const current = await fetchRemoteSettings(token);
+    if(current.status !== 200 && current.status !== 404) throw new Error('status '+current.status);
+    if(current.remote && stampOf(current.remote.settingsSavedAt) > stampOf(remoteSettingsAt)){
+      // Changed elsewhere since this tab loaded it. Take theirs; don't overwrite it.
+      applySettingsPayload(current.remote);
+      remoteSettingsAt = current.remote.settingsSavedAt || null;
+      await writeLocalSettings();
+      setStoragePill('Rate Master changed elsewhere \u2014 reloaded', 'error');
+      alert('The Rate Master was changed elsewhere (from Claude or another computer) at '
+        + new Date(current.remote.settingsSavedAt).toLocaleString('en-IN') + '.\n\n'
+        + 'Those rates are now loaded here. Your last Rate Master change was NOT saved: check the rates and make it again if it is still needed.');
+      return;
+    }
     await ensureOneDriveFolder(token);
     await uploadJsonToOneDrive(token, '_settings.json', settingsPayload());
+    remoteSettingsAt = state.settingsSavedAt;
     setStoragePill('Rates synced ' + new Date().toLocaleTimeString('en-IN'), 'ok');
   }catch(err){
     console.warn('settings sync failed', err);
@@ -2040,6 +2070,7 @@ async function loadSettingsFromOneDrive(){
   if(res.status === 404){
     // Nothing saved in this folder yet: this browser's settings become the saved ones.
     oneDriveSettingsState = 'ready';
+    remoteSettingsAt = null;
     if(state.settingsSavedAt) scheduleOneDriveSettingsSync();
     return true;
   }
@@ -2047,8 +2078,9 @@ async function loadSettingsFromOneDrive(){
   let remote;
   try{ remote = await res.json(); }catch(err){ return failed(err); }
   oneDriveSettingsState = 'ready';
-  const localAt = Date.parse(state.settingsSavedAt || '') || 0;
-  const remoteAt = Date.parse((remote && remote.settingsSavedAt) || '') || 0;
+  remoteSettingsAt = (remote && remote.settingsSavedAt) || null;
+  const localAt = stampOf(state.settingsSavedAt);
+  const remoteAt = stampOf(remoteSettingsAt);
   if(localAt > remoteAt){
     // Edited in this browser after OneDrive last heard about it (e.g. while offline): push it.
     scheduleOneDriveSettingsSync();
@@ -2069,6 +2101,7 @@ document.getElementById('syncSettingsBtn').addEventListener('click', async ()=>{
     await uploadJsonToOneDrive(token, '_settings.json', settingsPayload());
     // An explicit push: this browser's settings are now the saved ones.
     oneDriveSettingsState = 'ready';
+    remoteSettingsAt = state.settingsSavedAt;
     setStoragePill('Rates synced ' + new Date().toLocaleTimeString('en-IN'), 'ok');
     document.getElementById('oneDriveStatusNote').textContent = 'Settings synced to OneDrive just now.';
   }catch(err){
