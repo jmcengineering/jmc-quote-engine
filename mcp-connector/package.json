@@ -1,0 +1,22 @@
+{
+  "name": "jmc-quote-connector",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Claude connector (remote MCP server) for the JMC Quote Engine: price and save quotes from Claude into the same OneDrive folder the web app uses.",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/extract-engine.mjs",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node scripts/extract-engine.mjs && node --test --test-concurrency=1 test/*.test.js"
+  },
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "^1.2.3",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "pdfjs-dist": "^3.11.174",
+    "wrangler": "^4.148.0"
+  }
+}

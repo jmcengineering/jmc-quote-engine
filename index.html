@@ -263,7 +263,14 @@
   .rate-banner .btn{flex:none;}
   /* An auto-priced process cost the estimator has typed over. */
   input.proc-input.overridden{background:#fff7e6;border-color:#e0c98a;font-weight:600;}
+  .status-Draft{background:#efe9dc;color:#6b5a2e;border:1px dashed #b8a679;}
   .status-Open{background:#e6eef7;color:#264b7a;}
+  .draft-banner .rb-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .draft-banner details{flex-basis:100%;margin-top:4px;}
+  .draft-banner summary{cursor:pointer;font-weight:600;}
+  .draft-banner ol{margin:6px 0 0;padding-left:20px;max-height:220px;overflow:auto;}
+  .draft-banner .rb-progress{font-family:var(--mono);font-size:11.5px;}
+  td.has-note .pf{border-color:#d9b86a;}
   .status-Sent{background:#fff3d6;color:#8a5a00;}
   .status-Won{background:#dcf0df;color:#276b30;}
   .status-Lost{background:#f7dcdc;color:#8a2b2b;}
@@ -428,6 +435,7 @@
   <!-- QUOTE BUILDER -->
   <div class="panel" id="panel-quote">
     <div id="rateBanner" class="rate-banner live"></div>
+    <div id="draftBanner" class="rate-banner frozen draft-banner" style="display:none;"></div>
     <div class="card">
       <h2>Quote Header</h2>
       <div class="quote-meta">
@@ -441,6 +449,7 @@
         <div><label>Validity (days)</label><input type="number" id="qValidity" value="15"></div>
         <div><label>Status</label>
           <select id="qStatus" class="status-select" style="width:100%;">
+            <option value="Draft">Draft</option>
             <option value="Open">Open</option>
             <option value="Sent">Sent</option>
             <option value="Won">Won</option>
@@ -597,7 +606,12 @@
 <script>
 const DEFAULT_JMC_LOGO = "data:image/jpeg;base64,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";
 
-/* ================= STATE ================= */
+/* ================= COSTING ENGINE =================
+   Everything between the ENGINE-START and ENGINE-END markers is pure costing: no DOM, no
+   state, no browser APIs. The Claude connector (mcp-connector/) copies this block verbatim
+   at build time, so a quote priced from Claude matches the app to the rupee. Keep anything
+   that touches the page outside the markers. */
+/* ===== ENGINE-START ===== */
 const PROC_COLS = [
   {key:'millTurn', label:'Mill/Turn'},
   {key:'grind', label:'Grind'},
@@ -618,14 +632,66 @@ function defaultProcessRates(){
   PROC_COLS.forEach(c=>{ o[c.key] = {mode: c.key==='ht' ? 'auto' : 'manual', rate: c.key==='ht' ? 80 : 0}; });
   return o;
 }
-
-const state = {
-  materials: [
+function defaultMaterials(){
+  return [
     {id:'MS', name:'MS', rate:80, density:7.85, htRate:60, notes:'Mild Steel'},
     {id:'OHNS', name:'OHNS', rate:150, density:7.85, htRate:90, notes:'Oil Hardened Non-Shrink'},
     {id:'HCHCR', name:'HCHCR', rate:250, density:7.85, htRate:110, notes:'High Carbon High Chromium'},
     {id:'P20', name:'P20', rate:220, density:7.85, htRate:100, notes:'Mould Steel'},
-  ],
+  ];
+}
+function num(v){ const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+function roundUpTo10(v){ return Math.ceil(v/10)*10; }
+
+/* Price one part against a rate context (materials, processRates, stockAllowance) and the
+   quote's margin %. Pure: same inputs, same answer, in the app and in the connector. */
+function computePartWith(part, R, quoteMargin){
+  const mat = R.materials.find(m=>m.id===part.materialId) || {rate:0, density:7.85, htRate:0};
+  const a = Math.max(0, num(R.stockAllowance));
+  // A negative dimension is a typo, not a credit \u2014 never let one subtract from a quote.
+  const dim = v => Math.max(0, num(v));
+  let weight = 0, rmCost = 0;
+  if(part.shape==='block'){
+    weight = (dim(part.t)+a) * (dim(part.w)+a) * (dim(part.l)+a) * num(mat.density) / 1000000;
+    rmCost = weight * num(mat.rate);
+  } else if(part.shape==='round'){
+    const r = (dim(part.dia)+a)/2;
+    weight = Math.PI * r * r * (dim(part.l)+a) * num(mat.density) / 1000000;
+    rmCost = weight * num(mat.rate);
+  } else {
+    weight = 0;
+    rmCost = Math.max(0, num(part.unitPriceStd));
+  }
+  const procVals = {};
+  const procIsOverridden = {};
+  PROC_COLS.forEach(c=>{
+    const pr = R.processRates[c.key] || {mode:'manual', rate:0};
+    if(pr.mode==='auto'){
+      const hasOverride = part[c.key] !== '' && part[c.key] != null;
+      procIsOverridden[c.key] = hasOverride;
+      const effRate = (c.key==='ht') ? num(mat.htRate) : num(pr.rate);
+      procVals[c.key] = hasOverride ? Math.max(0, num(part[c.key])) : roundUpTo10(weight * effRate);
+    } else {
+      procIsOverridden[c.key] = false;
+      procVals[c.key] = Math.max(0, num(part[c.key]));
+    }
+  });
+  const processSum = Object.values(procVals).reduce((s,v)=>s+v,0);
+  const sum = rmCost + processSum;
+  const marginPct = (part.marginOverride!=='' && part.marginOverride!=null)
+    ? num(part.marginOverride) : num(quoteMargin);
+  const margin = sum * (marginPct/100);
+  const subTotal = sum + margin;
+  const qty = (part.qty===''||part.qty==null) ? 1 : Math.max(0, num(part.qty));
+  const lineTotal = subTotal * qty;
+  return {weight, rmCost, procVals, procIsOverridden, processSum, sum, marginPct, margin, subTotal, lineTotal, qty};
+}
+/* ===== ENGINE-END ===== */
+
+/* ================= STATE ================= */
+
+const state = {
+  materials: defaultMaterials(),
   processRates: defaultProcessRates(),
   stockAllowance: 5,
   defaultMargin: 15,
@@ -648,6 +714,7 @@ const state = {
   quoteRatesLinked: true,   // true = this quote follows the Rate Master live
   quoteRatesSavedAt: null,  // when the frozen snapshot was taken
   quoteRatesLegacy: false,  // loaded from a file saved before snapshots existed
+  quoteSource: null,        // {name} of the drawing PDF a Claude-prepared draft came from
   parts: [],
   extraItems: [
     {description:'Design Costing', amount:3000},
@@ -757,7 +824,6 @@ async function loadSettings(){
 
 /* ================= HELPERS ================= */
 function fmt(n){ return activeRates().currency + (Math.round(n*100)/100).toLocaleString('en-IN',{maximumFractionDigits:2}); }
-function num(v){ const n = parseFloat(v); return isNaN(n) ? 0 : n; }
 function hexToRgb(hex){
   hex = (hex||'#b9793f').replace('#','');
   if(hex.length===3) hex = hex.split('').map(c=>c+c).join('');
@@ -778,7 +844,6 @@ function esc(v){
     .replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')
     .replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
-function roundUpTo10(v){ return Math.ceil(v/10)*10; }
 // Today's date in the user's own time zone. toISOString() is UTC, so between midnight and
 // 05:30 IST it gave yesterday's date to every new quote.
 function todayISO(d){
@@ -857,49 +922,10 @@ function activeRates(){
 }
 
 /* ================= CALC ================= */
+// Margin comes from state, not from reading #qMargin mid-calculation. Reading the DOM
+// here was why a saved stock allowance / margin never actually took effect on reload.
 function computePart(part, rates){
-  const R = rates || activeRates();
-  const mat = R.materials.find(m=>m.id===part.materialId) || {rate:0, density:7.85, htRate:0};
-  const a = Math.max(0, num(R.stockAllowance));
-  // A negative dimension is a typo, not a credit \u2014 never let one subtract from a quote.
-  const dim = v => Math.max(0, num(v));
-  let weight = 0, rmCost = 0;
-  if(part.shape==='block'){
-    weight = (dim(part.t)+a) * (dim(part.w)+a) * (dim(part.l)+a) * num(mat.density) / 1000000;
-    rmCost = weight * num(mat.rate);
-  } else if(part.shape==='round'){
-    const r = (dim(part.dia)+a)/2;
-    weight = Math.PI * r * r * (dim(part.l)+a) * num(mat.density) / 1000000;
-    rmCost = weight * num(mat.rate);
-  } else {
-    weight = 0;
-    rmCost = Math.max(0, num(part.unitPriceStd));
-  }
-  const procVals = {};
-  const procIsOverridden = {};
-  PROC_COLS.forEach(c=>{
-    const pr = R.processRates[c.key] || {mode:'manual', rate:0};
-    if(pr.mode==='auto'){
-      const hasOverride = part[c.key] !== '' && part[c.key] != null;
-      procIsOverridden[c.key] = hasOverride;
-      const effRate = (c.key==='ht') ? num(mat.htRate) : num(pr.rate);
-      procVals[c.key] = hasOverride ? Math.max(0, num(part[c.key])) : roundUpTo10(weight * effRate);
-    } else {
-      procIsOverridden[c.key] = false;
-      procVals[c.key] = Math.max(0, num(part[c.key]));
-    }
-  });
-  const processSum = Object.values(procVals).reduce((s,v)=>s+v,0);
-  const sum = rmCost + processSum;
-  // Margin comes from state, not from reading #qMargin mid-calculation. Reading the DOM
-  // here was why a saved stock allowance / margin never actually took effect on reload.
-  const marginPct = (part.marginOverride!=='' && part.marginOverride!=null)
-    ? num(part.marginOverride) : num(state.quoteMargin);
-  const margin = sum * (marginPct/100);
-  const subTotal = sum + margin;
-  const qty = (part.qty===''||part.qty==null) ? 1 : Math.max(0, num(part.qty));
-  const lineTotal = subTotal * qty;
-  return {weight, rmCost, procVals, procIsOverridden, processSum, sum, marginPct, margin, subTotal, lineTotal, qty};
+  return computePartWith(part, rates || activeRates(), state.quoteMargin);
 }
 
 /* ================= RATE MASTER: MATERIALS ================= */
@@ -1168,7 +1194,7 @@ function buildPartRowHTML(part, displayIndex){
         ${part.image ? `<img src="${part.image}"><button class="clear-photo" title="Remove photo">×</button>` : 'Click +<br>paste image'}
       </div>
     </td>
-    <td class="desc-cell"><input class="pf" data-f="description" value="${esc(part.description)}" placeholder="Part description"></td>
+    <td class="desc-cell${part.estimateNote ? ' has-note' : ''}"${part.estimateNote ? ` title="Claude: ${esc(part.estimateNote)}"` : ''}><input class="pf" data-f="description" value="${esc(part.description)}" placeholder="Part description"></td>
     <td>
       <select class="pf shape-select" data-f="shape">
         <option value="block" ${part.shape==='block'?'selected':''}>Block</option>
@@ -1295,6 +1321,117 @@ function renderParts(){
     updateRowComputed(tr, part);
   });
   updateTotals();
+  renderDraftBanner();
+}
+
+/* ================= DRAFTS FROM CLAUDE =================
+   The Claude connector saves quotes as Drafts. For a drawing PDF it records, per part, the
+   page and area of the best view (drawingRef) and a note on what it estimated. Pictures are
+   cropped here, from the PDF the user attaches, so they never pass through Claude. */
+const PDFJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+let pdfJsPromise = null;
+function loadPdfJs(){
+  if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if(!pdfJsPromise){
+    pdfJsPromise = new Promise((resolve, reject)=>{
+      const sc = document.createElement('script');
+      sc.src = PDFJS_URL; sc.crossOrigin = 'anonymous'; sc.referrerPolicy = 'no-referrer';
+      sc.onload = ()=>{
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_URL.replace('pdf.min.js', 'pdf.worker.min.js');
+        resolve(window.pdfjsLib);
+      };
+      sc.onerror = ()=>{ pdfJsPromise = null; reject(new Error('Could not load the PDF reader. Check the internet connection and try again.')); };
+      document.head.appendChild(sc);
+    });
+  }
+  return pdfJsPromise;
+}
+
+/* Crop one area of a rendered page into a part picture: about 520px across while rendering,
+   then fitted within 260px like a pasted photo, on white, as JPEG. */
+async function cropPdfArea(page, box){
+  const base = page.getViewport({scale:1});
+  const [x0,y0,x1,y1] = box;
+  const areaLong = Math.max((x1-x0)*base.width, (y1-y0)*base.height) || 1;
+  const scale = Math.min(6, Math.max(0.5, 520/areaLong), 8000/Math.max(base.width, base.height));
+  const vp = page.getViewport({scale});
+  const full = document.createElement('canvas');
+  full.width = Math.ceil(vp.width); full.height = Math.ceil(vp.height);
+  const fctx = full.getContext('2d');
+  fctx.fillStyle = '#fff'; fctx.fillRect(0, 0, full.width, full.height);
+  await page.render({canvasContext: fctx, viewport: vp}).promise;
+  const sx = x0*full.width, sy = y0*full.height, sw = (x1-x0)*full.width, sh = (y1-y0)*full.height;
+  const fit = Math.min(1, 260/Math.max(sw, sh));
+  const out = document.createElement('canvas');
+  out.width = Math.max(1, Math.round(sw*fit)); out.height = Math.max(1, Math.round(sh*fit));
+  const octx = out.getContext('2d');
+  octx.fillStyle = '#fff'; octx.fillRect(0, 0, out.width, out.height);
+  octx.drawImage(full, sx, sy, sw, sh, 0, 0, out.width, out.height);
+  full.width = full.height = 0; // free the big canvas now, not at GC time
+  return out.toDataURL('image/jpeg', 0.8);
+}
+
+async function fillPicturesFromPdf(file, onProgress){
+  const lib = await loadPdfJs();
+  const doc = await lib.getDocument({data: new Uint8Array(await file.arrayBuffer())}).promise;
+  const todo = state.parts.filter(p=>p.drawingRef && !p.image);
+  const byPage = new Map();
+  todo.forEach(p=>{ const n = p.drawingRef.page; if(!byPage.has(n)) byPage.set(n, []); byPage.get(n).push(p); });
+  let done = 0; const missingPages = [];
+  for(const [n, parts] of [...byPage].sort((a,b)=>a[0]-b[0])){
+    if(n > doc.numPages){ missingPages.push(n); continue; }
+    const page = await doc.getPage(n);
+    for(const p of parts){
+      try{ p.image = await cropPdfArea(page, p.drawingRef.box); done++; }
+      catch(err){ console.warn('crop failed for part', p.id, err); }
+      onProgress && onProgress(done, todo.length);
+    }
+    page.cleanup();
+  }
+  doc.destroy();
+  return {done, total: todo.length, pages: doc.numPages, missingPages};
+}
+
+function renderDraftBanner(){
+  const el = document.getElementById('draftBanner');
+  if(!el) return;
+  const withRef = state.parts.filter(p=>p.drawingRef);
+  const needPics = withRef.filter(p=>!p.image);
+  const noted = state.parts.map((p,i)=>({p, i})).filter(x=>x.p.estimateNote);
+  const isDraft = state.quoteStatus === 'Draft';
+  if(!isDraft && !needPics.length){ el.style.display = 'none'; el.innerHTML = ''; return; }
+  const src = state.quoteSource && state.quoteSource.name ? ` from <b>${esc(state.quoteSource.name)}</b>` : '';
+  const lead = isDraft
+    ? `<b>Draft</b>${state.quoteSource ? ' prepared by Claude' + src : ''}. Check every part and rate, then set <b>Status</b> to Open or Sent and save before sending it.`
+    : `${needPics.length} part picture(s) can still be filled from the drawing PDF${src}.`;
+  const picLine = needPics.length
+    ? `<span>${needPics.length} of ${withRef.length} part pictures not filled yet.</span>
+       <label class="btn btn-outline btn-sm" style="margin:0;">Attach drawing PDF<input type="file" id="draftPdfInput" accept="application/pdf" style="display:none;"></label>
+       <span class="rb-progress" id="draftPdfProgress"></span>`
+    : (withRef.length ? `<span>All ${withRef.length} part pictures filled.</span>` : '');
+  const notes = noted.length
+    ? `<details><summary>Claude's notes on ${noted.length} part(s): check these first</summary><ol>`
+      + noted.map(x=>`<li value="${x.i+1}"><b>${esc(x.p.description || 'Part')}</b>: ${esc(x.p.estimateNote)}</li>`).join('')
+      + `</ol></details>` : '';
+  el.style.display = '';
+  el.innerHTML = `<div class="rb-text">${lead}</div><div class="rb-actions">${picLine}</div>${notes}`;
+  const input = document.getElementById('draftPdfInput');
+  if(input) input.addEventListener('change', async (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const prog = document.getElementById('draftPdfProgress');
+    prog.textContent = 'Reading PDF\u2026';
+    try{
+      const r = await fillPicturesFromPdf(file, (d, t)=>{ prog.textContent = `Cropping pictures ${d}/${t}\u2026`; });
+      renderParts();
+      const p2 = document.getElementById('draftPdfProgress');
+      if(p2) p2.textContent = `Filled ${r.done} picture(s)` + (r.missingPages.length ? `; this PDF has no page ${r.missingPages.join(', ')}. Is it the right file?` : '.');
+      if(typeof scheduleAutosave === 'function') scheduleAutosave();
+    }catch(err){
+      console.warn(err);
+      prog.textContent = 'Could not read that PDF: ' + err.message;
+    }
+  });
 }
 
 /* recompute every row's readouts without rebuilding inputs (e.g. after a Rate Master change) */
@@ -1411,7 +1548,7 @@ document.getElementById('defaultMargin').addEventListener('input', e=>{ state.de
 document.getElementById('qMargin').addEventListener('input', e=>{ state.quoteMargin = num(e.target.value); recalcReadouts(); scheduleAutosave(); });
 document.getElementById('currencySymbol').addEventListener('input', e=>{ state.currency = e.target.value || '₹'; recalcReadouts(); saveSettings(); });
 document.getElementById('marginDisplayMode').addEventListener('change', e=>{ state.marginDisplayMode = e.target.value; recalcReadouts(); saveSettings(); });
-document.getElementById('qStatus').addEventListener('change', e=>{ state.quoteStatus = e.target.value; scheduleAutosave(); });
+document.getElementById('qStatus').addEventListener('change', e=>{ state.quoteStatus = e.target.value; renderDraftBanner(); scheduleAutosave(); });
 // Any quote-header field edit should also nudge the crash-recovery autosave.
 ['qQuoteNo','qPartNo','qPartName','qOperation','qCustomer','qDate','qValidity'].forEach(id=>{
   document.getElementById(id).addEventListener('input', ()=>{ if(typeof scheduleAutosave==='function') scheduleAutosave(); });
@@ -1436,6 +1573,7 @@ function getImageNaturalSize(dataUrl){
   });
 }
 document.getElementById('exportPdfBtn').addEventListener('click', async ()=>{
+  if(state.quoteStatus === 'Draft' && !confirm('This quote is still a Draft. Have you checked every part and rate?\n\nOK = export the customer PDF anyway \u00b7 Cancel = go back and check')) return;
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({unit:'pt', format:'a4', orientation:'landscape'});
   const margin = 36;
@@ -1986,6 +2124,22 @@ function applySettingsPayload(saved){
   renderBranding(); renderPartsMaterialOptions(); renderParts(); renderRateBanner();
 }
 
+/* The settingsSavedAt of the OneDrive copy this tab last read or wrote. The Rate Master has
+   more than one writer (other computers, and the Claude connector), so before uploading we
+   check that nobody changed it since: uploading this tab's whole Rate Master over a newer one
+   would silently undo their change. */
+let remoteSettingsAt = null;
+const stampOf = (v)=> Date.parse(v || '') || 0;
+
+async function fetchRemoteSettings(token){
+  const folder = oneDriveFolderName();
+  const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(folder)}/_settings.json:/content`;
+  const res = await fetch(url, {headers:{Authorization:`Bearer ${token}`}});
+  if(res.status === 404) return {status:404, remote:null};
+  if(!res.ok) return {status:res.status, remote:null};
+  return {status:200, remote: await res.json()};
+}
+
 async function saveSettingsToOneDrive(){
   if(!msalInstance || !msalInstance.getAllAccounts().length) return; // gate isn't passed yet
   if(oneDriveSettingsState !== 'ready'){
@@ -1996,8 +2150,22 @@ async function saveSettingsToOneDrive(){
   }
   try{
     const token = await getGraphToken(false);
+    const current = await fetchRemoteSettings(token);
+    if(current.status !== 200 && current.status !== 404) throw new Error('status '+current.status);
+    if(current.remote && stampOf(current.remote.settingsSavedAt) > stampOf(remoteSettingsAt)){
+      // Changed elsewhere since this tab loaded it. Take theirs; don't overwrite it.
+      applySettingsPayload(current.remote);
+      remoteSettingsAt = current.remote.settingsSavedAt || null;
+      await writeLocalSettings();
+      setStoragePill('Rate Master changed elsewhere \u2014 reloaded', 'error');
+      alert('The Rate Master was changed elsewhere (from Claude or another computer) at '
+        + new Date(current.remote.settingsSavedAt).toLocaleString('en-IN') + '.\n\n'
+        + 'Those rates are now loaded here. Your last Rate Master change was NOT saved: check the rates and make it again if it is still needed.');
+      return;
+    }
     await ensureOneDriveFolder(token);
     await uploadJsonToOneDrive(token, '_settings.json', settingsPayload());
+    remoteSettingsAt = state.settingsSavedAt;
     setStoragePill('Rates synced ' + new Date().toLocaleTimeString('en-IN'), 'ok');
   }catch(err){
     console.warn('settings sync failed', err);
@@ -2024,6 +2192,7 @@ async function loadSettingsFromOneDrive(){
   if(res.status === 404){
     // Nothing saved in this folder yet: this browser's settings become the saved ones.
     oneDriveSettingsState = 'ready';
+    remoteSettingsAt = null;
     if(state.settingsSavedAt) scheduleOneDriveSettingsSync();
     return true;
   }
@@ -2031,8 +2200,9 @@ async function loadSettingsFromOneDrive(){
   let remote;
   try{ remote = await res.json(); }catch(err){ return failed(err); }
   oneDriveSettingsState = 'ready';
-  const localAt = Date.parse(state.settingsSavedAt || '') || 0;
-  const remoteAt = Date.parse((remote && remote.settingsSavedAt) || '') || 0;
+  remoteSettingsAt = (remote && remote.settingsSavedAt) || null;
+  const localAt = stampOf(state.settingsSavedAt);
+  const remoteAt = stampOf(remoteSettingsAt);
   if(localAt > remoteAt){
     // Edited in this browser after OneDrive last heard about it (e.g. while offline): push it.
     scheduleOneDriveSettingsSync();
@@ -2053,6 +2223,7 @@ document.getElementById('syncSettingsBtn').addEventListener('click', async ()=>{
     await uploadJsonToOneDrive(token, '_settings.json', settingsPayload());
     // An explicit push: this browser's settings are now the saved ones.
     oneDriveSettingsState = 'ready';
+    remoteSettingsAt = state.settingsSavedAt;
     setStoragePill('Rates synced ' + new Date().toLocaleTimeString('en-IN'), 'ok');
     document.getElementById('oneDriveStatusNote').textContent = 'Settings synced to OneDrive just now.';
   }catch(err){
@@ -2080,7 +2251,8 @@ function collectQuoteData(){
     // The rates this quote is costed with, frozen into the file. This is what stops a
     // saved quote from re-pricing itself when the Rate Master changes later.
     rates: cloneRates(activeRates()),
-    ratesLinked: state.quoteRatesLinked
+    ratesLinked: state.quoteRatesLinked,
+    sourceDocument: state.quoteSource || undefined
   };
 }
 /* The quote as written to OneDrive \u2014 content plus the timestamp. */
@@ -2136,6 +2308,7 @@ function startNewQuote(){
   state.quoteRates = null;
   state.quoteRatesLinked = true;
   state.quoteRatesLegacy = false;
+  state.quoteSource = null;
   state.quoteRatesSavedAt = null;
   document.getElementById('qQuoteNo').value = nextQuoteNumber();
   document.getElementById('qPartNo').value = '';
@@ -2182,6 +2355,7 @@ function applyQuoteData(q){
   state.parts = loadedParts;
   state.extraItems = q.extraItems || [];
   state.quoteStatus = q.status || 'Open';
+  state.quoteSource = q.sourceDocument || null;
   setQuoteMargin(q.margin || state.defaultMargin);
 
   // ---- rate context ----
@@ -2410,7 +2584,7 @@ async function refreshSavedQuotesList(){
   }
 }
 
-const KNOWN_STATUSES = ['Open','Sent','Won','Lost','On-Hold'];
+const KNOWN_STATUSES = ['Draft','Open','Sent','Won','Lost','On-Hold'];
 function renderSavedQuotesList(){
   const box = document.getElementById('savedQuotesList');
   const q = (document.getElementById('savedSearch').value || '').toLowerCase().trim();
