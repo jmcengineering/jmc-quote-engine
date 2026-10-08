@@ -61,6 +61,15 @@ unreachable OneDrive can't reset your saved rates to the defaults.
 
 OneDrive accepts a single file up to 4 MB, which a photo-heavy quote can reach.
 
+## Using it from Claude
+
+`mcp-connector/` is a Claude connector (remote MCP server on Cloudflare Workers). Once it is
+deployed and added in claude.ai, Claude can read the Rate Master, price a quote, save it into
+the same OneDrive folder (it shows up under Saved Quotes) and update quote statuses, from
+claude.ai, the Claude mobile and desktop apps, or Claude Code. It prices with this app's own
+costing code, copied from the `ENGINE-START` / `ENGINE-END` block of `index.html` at deploy time,
+so redeploy the connector after changing that block. Setup: `mcp-connector/README.md`.
+
 ## Tests
 
 ```sh

@@ -1,0 +1,29 @@
+// Cloudflare Worker for the JMC Quote Engine Claude connector. See README.md for setup.
+{
+  "name": "jmc-quote-connector",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // Copies the costing engine out of ../index.html before every dev run and deploy,
+  // so the connector always prices with exactly the app's code.
+  "build": { "command": "node scripts/extract-engine.mjs" },
+  "kv_namespaces": [
+    // OAuth clients, grants and tokens (stored hashed / encrypted by the library).
+    // Create it with:  npx wrangler kv namespace create OAUTH_KV   and paste the id here.
+    { "binding": "OAUTH_KV", "id": "REPLACE_WITH_KV_NAMESPACE_ID" }
+  ],
+  "vars": {
+    // The public URL of this Worker, no trailing slash. The MCP endpoint is PUBLIC_URL + "/mcp".
+    "PUBLIC_URL": "https://jmc-quote-connector.REPLACE-ME.workers.dev",
+    // Your Microsoft Entra tenant (same one the web app signs in to).
+    "MS_TENANT_ID": "ae273161-7bde-4004-9e52-0ebbee8e3c0d",
+    // Application (client) ID of the Entra app registration created for this connector.
+    "MS_CLIENT_ID": "REPLACE_WITH_CONNECTOR_APP_CLIENT_ID",
+    // Must match the folder name set in the web app (Rate Master -> OneDrive Storage).
+    "ONEDRIVE_FOLDER": "JMC Quotations",
+    // Same sign-in allowlist as the web app (comma separated).
+    "ALLOWED_DOMAINS": "jmcengg.com",
+    "ALLOWED_EMAILS": "info@jmcengg.com"
+  }
+  // Secret, set with:  npx wrangler secret put MS_CLIENT_SECRET
+}

@@ -59,3 +59,5 @@ saw internal notes; it belongs in the repository instead.
 - **Fixed** — PDF: an extra line item with an amount but no description was left out of the Additional Charges table but still counted in the Grand Total. It is now printed as "Additional charge".
 - **Fixed** — New quotes between midnight and 05:30 IST got yesterday's date (the date was taken in UTC).
 - **Fixed** — A blank Qty is costed as 1 in the app but was exported as 0 to Excel and printed blank in the PDF; both now show 1.
+- **Added** — Claude connector (`mcp-connector/`): a remote MCP server that lets Claude price, save, list and update quotes in the same OneDrive folder, from claude.ai, mobile, desktop or Claude Code. Each user signs in with their own JMC Microsoft account. Setup in `mcp-connector/README.md`.
+- **Changed** — The costing engine in `index.html` is now one pure block (`computePartWith`, between `ENGINE-START` and `ENGINE-END`) that the connector copies at build time, so a quote priced from Claude matches the app exactly. The app's behaviour is unchanged.
