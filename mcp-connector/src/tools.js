@@ -6,7 +6,7 @@ import { PROC_COLS } from './engine.generated.js';
 import { OneDrive, GraphError, SETTINGS_FILE } from './onedrive.js';
 import {
   STATUSES, QuoteInputError, rateMasterFrom, buildQuoteFile, priceQuote, indexEntryFor,
-  nextQuoteNo, isValidQuoteNo, applyRateMasterChanges,
+  nextQuoteNo, isValidQuoteNo, applyRateMasterChanges, appendParts,
 } from './quotes.js';
 
 const PROCESS_LIST = PROC_COLS.map((c) => `${c.key} (${c.label})`).join(', ');
@@ -28,6 +28,13 @@ const partSchema = z.object({
     .describe(`Machining / process costs in rupees PER PIECE, keyed by process. Processes: ${PROCESS_LIST}. ` +
       'Processes set to Auto in the Rate Master (Heat Treatment by default) price themselves from weight; give a value only to override. Manual processes left out cost 0.'),
   marginPercent: z.number().optional().describe('Margin % for this part only, overriding the quote margin'),
+  drawing: z.object({
+    page: z.number().int().min(1).describe('1-based page number in the source PDF'),
+    box: z.array(z.number().min(0).max(1)).length(4)
+      .describe('Area of the best picture of the part on that page, as fractions of the page: [left, top, right, bottom], top-left is [0,0]. Prefer the isometric view; otherwise the most descriptive view. Include a small margin.'),
+    view: z.string().optional().describe('Which view this is, e.g. "isometric", "front view"'),
+  }).optional().describe('Where this part is drawn in the PDF the user gave. The web app crops the picture from the PDF when the user attaches it to the draft.'),
+  note: z.string().optional().describe('Short note for the estimator: what was assumed or estimated and how confident (e.g. "grind cost from similar JMC-QT-131 part; HRC 58-60 so HT kept"). Shown in the app on the draft.'),
 });
 
 const quoteShape = {
@@ -38,7 +45,8 @@ const quoteShape = {
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Quote date YYYY-MM-DD; defaults to today (India time)'),
   marginPercent: z.number().optional().describe('Quote margin %, applied to every part without its own; defaults to the Rate Master default'),
   validityDays: z.number().int().positive().optional().describe('Validity in days; defaults to 15'),
-  status: z.enum(STATUSES).optional().describe('Defaults to Open'),
+  status: z.enum(STATUSES).optional().describe('Defaults to Draft: quotes made from Claude are drafts until the user checks them in the app'),
+  sourceDocument: z.string().optional().describe('File name of the PDF the parts came from, so the app can ask for it to fill in part pictures'),
   parts: z.array(partSchema).min(1).describe('Line items'),
   extraItems: z.array(z.object({
     description: z.string(), amount: z.number().min(0).describe('Rupees'),
@@ -77,8 +85,10 @@ export function createServer(env, user) {
         'JMC Engineering quotation tool (jigs, fixtures, press tools, plastic moulds). Prices use the company Rate Master ' +
         'and the same costing engine as the JMC Quote Engine web app. Workflow: get_rate_master for materials and processes, ' +
         'update_rate_master to change rates (preview first, apply only after the user confirms), ' +
-        'price_quote to show the user a breakdown, and save_quote only once they are happy with it. Saved quotes appear in ' +
-        'the web app under Saved Quotes, where the user exports the customer PDF. Amounts are Indian rupees.',
+        'price_quote to show the user a breakdown, then save_quote (saved as a Draft; add_parts for further batches). For a PDF of part ' +
+        'drawings, record for each part the page and box of its best view (isometric if drawn) so the app can crop the picture, ' +
+        'and a short note of what was estimated. The user checks the draft in the web app, confirms it and exports the customer PDF. ' +
+        'Amounts are Indian rupees.',
     },
   );
   const drive = new OneDrive({ token: user.msAccessToken, folder: env.ONEDRIVE_FOLDER || 'JMC Quotations', graphBase: env.GRAPH_BASE });
@@ -203,7 +213,7 @@ export function createServer(env, user) {
 
   server.registerTool('save_quote', {
     title: 'Save a quote to OneDrive',
-    description: 'Price a quote with the current Rate Master and save it to OneDrive, where it appears in the web app under Saved Quotes (Load, then Export PDF). The rates used are stored with the quote, as the app does. Leave quoteNo out to get the next JMC-QT number. Saving over an existing quote number needs overwrite=true and replaces that quote entirely.',
+    description: 'Price a quote with the current Rate Master and save it to OneDrive as a Draft. It appears in the web app under Saved Quotes, where the user loads it, attaches the source PDF to fill in part pictures, checks the rates, changes the status and exports the customer PDF. The rates used are stored with the quote, as the app does. Leave quoteNo out to get the next JMC-QT number. For many parts, save the first batch (up to about 20) here and add the rest with add_parts. Saving over an existing quote number needs overwrite=true and replaces that quote entirely.',
     inputSchema: {
       ...quoteShape,
       quoteNo: z.string().optional().describe('Leave out for the next automatic JMC-QT-### number, or give one (e.g. an EW-#### job number)'),
@@ -246,9 +256,29 @@ export function createServer(env, user) {
       priceQuote(file));
   }));
 
+  server.registerTool('add_parts', {
+    title: 'Add parts to a draft quote',
+    description: 'Append more parts to a Draft quote saved earlier (use it to save a large drawing set in batches of about 20 parts). Priced with the rates stored in that quote, so every part of the quote is consistent.',
+    inputSchema: { quoteNo: z.string(), parts: z.array(partSchema).min(1) },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  }, ({ quoteNo, parts }) => guarded(async () => {
+    if (!isValidQuoteNo(quoteNo)) return fail('That is not a valid quote number.');
+    for (let attempt = 0; ; attempt++) {
+      const { data: q, etag } = await drive.readJsonVersioned(`${quoteNo}.json`);
+      if (!q) return fail(`No saved quote "${quoteNo}" in OneDrive.`);
+      const { quote, addedCount } = appendParts(q, parts);
+      try { await drive.writeJson(`${quoteNo}.json`, quote, { ifMatch: etag }); }
+      catch (err) { if (err instanceof GraphError && err.status === 412 && attempt < 2) continue; throw err; }
+      try { await drive.updateIndex((quotes) => { quotes[`${quoteNo}.json`] = indexEntryFor(quote); }); } catch { /* Rebuild index catches up */ }
+      const priced = priceQuote(quote);
+      return ok(`Added ${addedCount} part(s) to ${quoteNo}; it now has ${quote.parts.length} parts. Grand total ${priced.currency}${priced.grandTotal}.`,
+        { quoteNo, partsNow: quote.parts.length, grandTotal: priced.grandTotal, added: priced.parts.slice(-addedCount) });
+    }
+  }));
+
   server.registerTool('update_quote_status', {
     title: 'Update a quote\'s status',
-    description: 'Mark a saved quote Open, Sent, Won, Lost or On-Hold. Prices and stored rates are not changed.',
+    description: 'Mark a saved quote Draft, Open, Sent, Won, Lost or On-Hold. Prices and stored rates are not changed. Leave drafts for the user to confirm in the app unless they ask.',
     inputSchema: { quoteNo: z.string(), status: z.enum(STATUSES) },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, ({ quoteNo, status }) => guarded(async () => {

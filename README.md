@@ -68,7 +68,13 @@ deployed and added in claude.ai, Claude can read and update the Rate Master, pri
 the same OneDrive folder (it shows up under Saved Quotes) and update quote statuses, from
 claude.ai, the Claude mobile and desktop apps, or Claude Code. It prices with this app's own
 costing code, copied from the `ENGINE-START` / `ENGINE-END` block of `index.html` at deploy time,
-so redeploy the connector after changing that block. Setup: `mcp-connector/README.md`.
+so redeploy the connector after changing that block. Setup: `cd mcp-connector && node setup.mjs`
+(details in `mcp-connector/README.md`).
+
+With the `claude-skills/jmc-quote-from-drawings` skill, you can upload a PDF of part drawings to
+Claude and get a priced **Draft** back. Load it in Saved Quotes and click **Attach drawing PDF**:
+the app crops each part's best picture (isometric if drawn) from the pages and areas Claude
+recorded. Check the rates, set the status, save and export.
 
 ## Tests
 

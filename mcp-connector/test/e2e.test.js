@@ -163,12 +163,12 @@ test('a non-JMC Microsoft account is refused', async () => {
   assert.equal(r.tokens, undefined);
 });
 
-test('MCP: initialize and the seven tools', async () => {
+test('MCP: initialize and the eight tools', async () => {
   const init = await mcp(session.tokens.access_token, 'initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } });
   assert.equal(init.result.serverInfo.name, 'jmc-quote-engine');
   const list = await mcp(session.tokens.access_token, 'tools/list', {});
   assert.deepEqual(list.result.tools.map((t) => t.name).sort(),
-    ['get_quote', 'get_rate_master', 'list_quotes', 'price_quote', 'save_quote', 'update_quote_status', 'update_rate_master']);
+    ['add_parts', 'get_quote', 'get_rate_master', 'list_quotes', 'price_quote', 'save_quote', 'update_quote_status', 'update_rate_master']);
   const save = list.result.tools.find((t) => t.name === 'save_quote');
   assert.equal(save.annotations.destructiveHint, true);
 });
@@ -240,13 +240,40 @@ test('list_quotes, get_quote, update_quote_status', async () => {
   const got = await call(session.tokens.access_token, 'get_quote', { quoteNo: savedNo });
   assert.equal(got.json.parts.length, 3);
   const st = await call(session.tokens.access_token, 'update_quote_status', { quoteNo: savedNo, status: 'Won' });
-  assert.match(st.text, /Open -> Won/);
+  assert.match(st.text, /Draft -> Won/, 'quotes saved from Claude start as Draft');
   assert.equal(JSON.parse(ms.state.files.get(`${FOLDER}/_index.json`)).quotes[`${savedNo}.json`].status, 'Won');
   const won = await call(session.tokens.access_token, 'list_quotes', { status: 'Won' });
   assert.deepEqual(won.json.map((q) => q.quoteNo), [savedNo]);
   // Changing status never re-prices: grand total in the file is unchanged.
   const again = await call(session.tokens.access_token, 'get_quote', { quoteNo: savedNo });
   assert.equal(again.json.grandTotal, got.json.grandTotal);
+});
+
+test('add_parts: batches append to a draft, priced with its stored rates; refused once confirmed', async () => {
+  const t = session.tokens.access_token;
+  const first = await call(t, 'save_quote', { customer: 'Sundram', sourceDocument: 'RFQ-Sundram.pdf',
+    parts: [{ description: 'Plate A', material: 'MS', t: 20, w: 50, l: 80, drawing: { page: 1, box: [0.1, 0.1, 0.6, 0.6], view: 'isometric' }, note: 'est.' }] });
+  assert.equal(first.isError, false, first.text);
+  const qn = first.json.quoteNo;
+  assert.equal(first.json.status, 'Draft');
+  assert.equal(first.json.sourceDocument.name, 'RFQ-Sundram.pdf');
+  assert.deepEqual(first.json.parts[0].drawing, { page: 1, box: [0.1, 0.1, 0.6, 0.6], view: 'isometric' });
+  const more = await call(t, 'add_parts', { quoteNo: qn, parts: [
+    { description: 'Plate B', material: 'MS', t: 20, w: 50, l: 80, drawing: { page: 2, box: [0, 0, 1, 1] } },
+    { description: 'Pin', material: 'OHNS', shape: 'round', dia: 10, l: 30 }] });
+  assert.equal(more.isError, false, more.text);
+  assert.equal(more.json.partsNow, 3);
+  const file = JSON.parse(ms.state.files.get(`${FOLDER}/${qn}.json`));
+  assert.deepEqual(file.parts.map((p) => p.id), [1, 2, 3]);
+  const got = await call(t, 'get_quote', { quoteNo: qn });
+  assert.equal(got.json.parts[0].lineTotal, got.json.parts[1].lineTotal, 'same part, same rates, same price across batches');
+  assert.equal(JSON.parse(ms.state.files.get(`${FOLDER}/_index.json`)).quotes[`${qn}.json`].grandTotal, Math.round(got.json.grandTotal));
+  const bad = await call(t, 'add_parts', { quoteNo: qn, parts: [{ description: 'x', material: 'MS', t: 1, w: 1, l: 1, drawing: { page: 1, box: [0.6, 0.1, 0.2, 0.5] } }] });
+  assert.match(bad.text, /right > left/);
+  await call(t, 'update_quote_status', { quoteNo: qn, status: 'Sent' });
+  const late = await call(t, 'add_parts', { quoteNo: qn, parts: [{ description: 'x', material: 'MS', t: 1, w: 1, l: 1 }] });
+  assert.equal(late.isError, true);
+  assert.match(late.text, /is Sent, not Draft/);
 });
 
 const settingsNow = () => JSON.parse(ms.state.files.get(`${FOLDER}/_settings.json`));

@@ -3,7 +3,7 @@
 import { PROC_COLS, defaultProcessRates, defaultMaterials, num, computePartWith } from './engine.generated.js';
 
 export const QUOTE_PREFIX = 'JMC-QT-';
-export const STATUSES = ['Open', 'Sent', 'Won', 'Lost', 'On-Hold'];
+export const STATUSES = ['Draft', 'Open', 'Sent', 'Won', 'Lost', 'On-Hold'];
 export const SHAPES = ['block', 'round', 'standard'];
 
 /** A mistake in what was asked for (unknown material, missing dimension...). Shown to Claude verbatim. */
@@ -85,6 +85,8 @@ export function toAppParts(inputParts, master) {
       qty: p.qty ?? 1, unitPriceStd: '', marginOverride: p.marginPercent ?? '', image: null,
     };
     PROC_COLS.forEach((c) => { part[c.key] = ''; });
+    if (p.drawing) part.drawingRef = toDrawingRef(p.drawing, where);
+    if (p.note) part.estimateNote = String(p.note).slice(0, 500);
 
     if (shape === 'standard') {
       if (p.unitPrice == null) throw new QuoteInputError(`${where}: a standard / bought-out part needs unitPrice.`);
@@ -119,6 +121,18 @@ export function toAppParts(inputParts, master) {
   });
 }
 
+/* Where the part's picture is in the source PDF. The web app crops it out when the user
+   attaches that PDF, so pictures never have to travel through Claude's output. */
+function toDrawingRef(d, where) {
+  const page = Number(d.page);
+  if (!Number.isInteger(page) || page < 1) throw new QuoteInputError(`${where}: drawing.page must be a page number from 1.`);
+  const box = Array.isArray(d.box) ? d.box.map(Number) : null;
+  if (!box || box.length !== 4 || box.some((v) => !(v >= 0 && v <= 1)) || box[2] <= box[0] || box[3] <= box[1]) {
+    throw new QuoteInputError(`${where}: drawing.box must be [left, top, right, bottom] as fractions of the page (0 to 1), with right > left and bottom > top.`);
+  }
+  return { page, box: box.map((v) => Math.round(v * 10000) / 10000), view: d.view ? String(d.view).slice(0, 60) : '' };
+}
+
 export function toAppExtras(extras) {
   return (extras || []).map((e) => ({ description: String(e.description ?? ''), amount: num(e.amount) }));
 }
@@ -140,6 +154,8 @@ export function priceQuote(q) {
       weightKg: round3(c.weight), rmCost: round2(c.rmCost), processes, sum: round2(c.sum),
       marginPercent: c.marginPct, margin: round2(c.margin), subTotalPerPc: round2(c.subTotal),
       qty: c.qty, lineTotal: round2(c.lineTotal),
+      ...(p.drawingRef ? { drawing: p.drawingRef } : {}),
+      ...(p.estimateNote ? { note: p.estimateNote } : {}),
     };
   });
   const partsTotalExact = (q.parts || []).reduce((s, p) => s + computePartWith(p, rates, margin).lineTotal, 0);
@@ -152,6 +168,7 @@ export function priceQuote(q) {
     partsTotal: round2(partsTotalExact), extrasTotal: round2(extrasTotal),
     grandTotal: round2(partsTotalExact + extrasTotal),
     ratesSavedAt: q.ratesSavedAt || q.savedAt || null,
+    ...(q.sourceDocument ? { sourceDocument: q.sourceDocument } : {}),
   };
 }
 
@@ -167,7 +184,7 @@ export function buildQuoteFile(input, master, quoteNo, now = new Date()) {
     date: input.date || todayIST(now),
     margin: String(input.marginPercent ?? master.defaultMargin),
     validity: String(input.validityDays ?? 15),
-    status: input.status || 'Open',
+    status: input.status || 'Draft',
     parts: toAppParts(input.parts, master),
     extraItems: toAppExtras(input.extraItems),
     rates: rateSnapshot(master),
@@ -175,6 +192,7 @@ export function buildQuoteFile(input, master, quoteNo, now = new Date()) {
     savedAt,
     ratesSavedAt: savedAt,
     savedBy: 'Claude connector',
+    ...(input.sourceDocument ? { sourceDocument: { name: String(input.sourceDocument).slice(0, 200) } } : {}),
   };
   if (!STATUSES.includes(file.status)) throw new QuoteInputError(`status must be one of ${STATUSES.join(', ')}.`);
   file.grandTotal = priceQuote(file).grandTotal;
@@ -285,4 +303,20 @@ export function applyRateMasterChanges(rawSettings, input, now = new Date()) {
   settings.settingsSavedAt = now.toISOString();
   delete settings.oneDriveFolder; // per-browser in the app; never synced
   return { settings, changes };
+}
+
+/** Append parts to a saved quote, priced with that quote's own stored rates. */
+export function appendParts(q, inputParts) {
+  if ((q.status || 'Open') !== 'Draft') {
+    throw new QuoteInputError(`${q.quoteNo} is ${q.status || 'Open'}, not Draft: parts can only be added to a draft. Ask the user to set it back to Draft in the app, or save a new quote.`);
+  }
+  const rates = q.rates && Array.isArray(q.rates.materials) && q.rates.materials.length ? q.rates : null;
+  if (!rates) throw new QuoteInputError(`${q.quoteNo} has no stored rates, so parts can't be added consistently.`);
+  const master = { ...rates, defaultMargin: num(q.margin) };
+  const added = toAppParts(inputParts, master);
+  const start = (q.parts || []).reduce((m, p) => Math.max(m, Number(p.id) || 0), 0);
+  added.forEach((p, i) => { p.id = start + i + 1; });
+  const out = { ...q, parts: [...(q.parts || []), ...added], savedAt: new Date().toISOString() };
+  out.grandTotal = priceQuote(out).grandTotal;
+  return { quote: out, addedCount: added.length };
 }

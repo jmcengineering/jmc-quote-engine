@@ -263,7 +263,14 @@
   .rate-banner .btn{flex:none;}
   /* An auto-priced process cost the estimator has typed over. */
   input.proc-input.overridden{background:#fff7e6;border-color:#e0c98a;font-weight:600;}
+  .status-Draft{background:#efe9dc;color:#6b5a2e;border:1px dashed #b8a679;}
   .status-Open{background:#e6eef7;color:#264b7a;}
+  .draft-banner .rb-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .draft-banner details{flex-basis:100%;margin-top:4px;}
+  .draft-banner summary{cursor:pointer;font-weight:600;}
+  .draft-banner ol{margin:6px 0 0;padding-left:20px;max-height:220px;overflow:auto;}
+  .draft-banner .rb-progress{font-family:var(--mono);font-size:11.5px;}
+  td.has-note .pf{border-color:#d9b86a;}
   .status-Sent{background:#fff3d6;color:#8a5a00;}
   .status-Won{background:#dcf0df;color:#276b30;}
   .status-Lost{background:#f7dcdc;color:#8a2b2b;}
@@ -428,6 +435,7 @@
   <!-- QUOTE BUILDER -->
   <div class="panel" id="panel-quote">
     <div id="rateBanner" class="rate-banner live"></div>
+    <div id="draftBanner" class="rate-banner frozen draft-banner" style="display:none;"></div>
     <div class="card">
       <h2>Quote Header</h2>
       <div class="quote-meta">
@@ -441,6 +449,7 @@
         <div><label>Validity (days)</label><input type="number" id="qValidity" value="15"></div>
         <div><label>Status</label>
           <select id="qStatus" class="status-select" style="width:100%;">
+            <option value="Draft">Draft</option>
             <option value="Open">Open</option>
             <option value="Sent">Sent</option>
             <option value="Won">Won</option>
@@ -705,6 +714,7 @@ const state = {
   quoteRatesLinked: true,   // true = this quote follows the Rate Master live
   quoteRatesSavedAt: null,  // when the frozen snapshot was taken
   quoteRatesLegacy: false,  // loaded from a file saved before snapshots existed
+  quoteSource: null,        // {name} of the drawing PDF a Claude-prepared draft came from
   parts: [],
   extraItems: [
     {description:'Design Costing', amount:3000},
@@ -1184,7 +1194,7 @@ function buildPartRowHTML(part, displayIndex){
         ${part.image ? `<img src="${part.image}"><button class="clear-photo" title="Remove photo">×</button>` : 'Click +<br>paste image'}
       </div>
     </td>
-    <td class="desc-cell"><input class="pf" data-f="description" value="${esc(part.description)}" placeholder="Part description"></td>
+    <td class="desc-cell${part.estimateNote ? ' has-note' : ''}"${part.estimateNote ? ` title="Claude: ${esc(part.estimateNote)}"` : ''}><input class="pf" data-f="description" value="${esc(part.description)}" placeholder="Part description"></td>
     <td>
       <select class="pf shape-select" data-f="shape">
         <option value="block" ${part.shape==='block'?'selected':''}>Block</option>
@@ -1311,6 +1321,117 @@ function renderParts(){
     updateRowComputed(tr, part);
   });
   updateTotals();
+  renderDraftBanner();
+}
+
+/* ================= DRAFTS FROM CLAUDE =================
+   The Claude connector saves quotes as Drafts. For a drawing PDF it records, per part, the
+   page and area of the best view (drawingRef) and a note on what it estimated. Pictures are
+   cropped here, from the PDF the user attaches, so they never pass through Claude. */
+const PDFJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+let pdfJsPromise = null;
+function loadPdfJs(){
+  if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if(!pdfJsPromise){
+    pdfJsPromise = new Promise((resolve, reject)=>{
+      const sc = document.createElement('script');
+      sc.src = PDFJS_URL; sc.crossOrigin = 'anonymous'; sc.referrerPolicy = 'no-referrer';
+      sc.onload = ()=>{
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_URL.replace('pdf.min.js', 'pdf.worker.min.js');
+        resolve(window.pdfjsLib);
+      };
+      sc.onerror = ()=>{ pdfJsPromise = null; reject(new Error('Could not load the PDF reader. Check the internet connection and try again.')); };
+      document.head.appendChild(sc);
+    });
+  }
+  return pdfJsPromise;
+}
+
+/* Crop one area of a rendered page into a part picture: about 520px across while rendering,
+   then fitted within 260px like a pasted photo, on white, as JPEG. */
+async function cropPdfArea(page, box){
+  const base = page.getViewport({scale:1});
+  const [x0,y0,x1,y1] = box;
+  const areaLong = Math.max((x1-x0)*base.width, (y1-y0)*base.height) || 1;
+  const scale = Math.min(6, Math.max(0.5, 520/areaLong), 8000/Math.max(base.width, base.height));
+  const vp = page.getViewport({scale});
+  const full = document.createElement('canvas');
+  full.width = Math.ceil(vp.width); full.height = Math.ceil(vp.height);
+  const fctx = full.getContext('2d');
+  fctx.fillStyle = '#fff'; fctx.fillRect(0, 0, full.width, full.height);
+  await page.render({canvasContext: fctx, viewport: vp}).promise;
+  const sx = x0*full.width, sy = y0*full.height, sw = (x1-x0)*full.width, sh = (y1-y0)*full.height;
+  const fit = Math.min(1, 260/Math.max(sw, sh));
+  const out = document.createElement('canvas');
+  out.width = Math.max(1, Math.round(sw*fit)); out.height = Math.max(1, Math.round(sh*fit));
+  const octx = out.getContext('2d');
+  octx.fillStyle = '#fff'; octx.fillRect(0, 0, out.width, out.height);
+  octx.drawImage(full, sx, sy, sw, sh, 0, 0, out.width, out.height);
+  full.width = full.height = 0; // free the big canvas now, not at GC time
+  return out.toDataURL('image/jpeg', 0.8);
+}
+
+async function fillPicturesFromPdf(file, onProgress){
+  const lib = await loadPdfJs();
+  const doc = await lib.getDocument({data: new Uint8Array(await file.arrayBuffer())}).promise;
+  const todo = state.parts.filter(p=>p.drawingRef && !p.image);
+  const byPage = new Map();
+  todo.forEach(p=>{ const n = p.drawingRef.page; if(!byPage.has(n)) byPage.set(n, []); byPage.get(n).push(p); });
+  let done = 0; const missingPages = [];
+  for(const [n, parts] of [...byPage].sort((a,b)=>a[0]-b[0])){
+    if(n > doc.numPages){ missingPages.push(n); continue; }
+    const page = await doc.getPage(n);
+    for(const p of parts){
+      try{ p.image = await cropPdfArea(page, p.drawingRef.box); done++; }
+      catch(err){ console.warn('crop failed for part', p.id, err); }
+      onProgress && onProgress(done, todo.length);
+    }
+    page.cleanup();
+  }
+  doc.destroy();
+  return {done, total: todo.length, pages: doc.numPages, missingPages};
+}
+
+function renderDraftBanner(){
+  const el = document.getElementById('draftBanner');
+  if(!el) return;
+  const withRef = state.parts.filter(p=>p.drawingRef);
+  const needPics = withRef.filter(p=>!p.image);
+  const noted = state.parts.map((p,i)=>({p, i})).filter(x=>x.p.estimateNote);
+  const isDraft = state.quoteStatus === 'Draft';
+  if(!isDraft && !needPics.length){ el.style.display = 'none'; el.innerHTML = ''; return; }
+  const src = state.quoteSource && state.quoteSource.name ? ` from <b>${esc(state.quoteSource.name)}</b>` : '';
+  const lead = isDraft
+    ? `<b>Draft</b>${state.quoteSource ? ' prepared by Claude' + src : ''}. Check every part and rate, then set <b>Status</b> to Open or Sent and save before sending it.`
+    : `${needPics.length} part picture(s) can still be filled from the drawing PDF${src}.`;
+  const picLine = needPics.length
+    ? `<span>${needPics.length} of ${withRef.length} part pictures not filled yet.</span>
+       <label class="btn btn-outline btn-sm" style="margin:0;">Attach drawing PDF<input type="file" id="draftPdfInput" accept="application/pdf" style="display:none;"></label>
+       <span class="rb-progress" id="draftPdfProgress"></span>`
+    : (withRef.length ? `<span>All ${withRef.length} part pictures filled.</span>` : '');
+  const notes = noted.length
+    ? `<details><summary>Claude's notes on ${noted.length} part(s): check these first</summary><ol>`
+      + noted.map(x=>`<li value="${x.i+1}"><b>${esc(x.p.description || 'Part')}</b>: ${esc(x.p.estimateNote)}</li>`).join('')
+      + `</ol></details>` : '';
+  el.style.display = '';
+  el.innerHTML = `<div class="rb-text">${lead}</div><div class="rb-actions">${picLine}</div>${notes}`;
+  const input = document.getElementById('draftPdfInput');
+  if(input) input.addEventListener('change', async (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const prog = document.getElementById('draftPdfProgress');
+    prog.textContent = 'Reading PDF\u2026';
+    try{
+      const r = await fillPicturesFromPdf(file, (d, t)=>{ prog.textContent = `Cropping pictures ${d}/${t}\u2026`; });
+      renderParts();
+      const p2 = document.getElementById('draftPdfProgress');
+      if(p2) p2.textContent = `Filled ${r.done} picture(s)` + (r.missingPages.length ? `; this PDF has no page ${r.missingPages.join(', ')}. Is it the right file?` : '.');
+      if(typeof scheduleAutosave === 'function') scheduleAutosave();
+    }catch(err){
+      console.warn(err);
+      prog.textContent = 'Could not read that PDF: ' + err.message;
+    }
+  });
 }
 
 /* recompute every row's readouts without rebuilding inputs (e.g. after a Rate Master change) */
@@ -1427,7 +1548,7 @@ document.getElementById('defaultMargin').addEventListener('input', e=>{ state.de
 document.getElementById('qMargin').addEventListener('input', e=>{ state.quoteMargin = num(e.target.value); recalcReadouts(); scheduleAutosave(); });
 document.getElementById('currencySymbol').addEventListener('input', e=>{ state.currency = e.target.value || '₹'; recalcReadouts(); saveSettings(); });
 document.getElementById('marginDisplayMode').addEventListener('change', e=>{ state.marginDisplayMode = e.target.value; recalcReadouts(); saveSettings(); });
-document.getElementById('qStatus').addEventListener('change', e=>{ state.quoteStatus = e.target.value; scheduleAutosave(); });
+document.getElementById('qStatus').addEventListener('change', e=>{ state.quoteStatus = e.target.value; renderDraftBanner(); scheduleAutosave(); });
 // Any quote-header field edit should also nudge the crash-recovery autosave.
 ['qQuoteNo','qPartNo','qPartName','qOperation','qCustomer','qDate','qValidity'].forEach(id=>{
   document.getElementById(id).addEventListener('input', ()=>{ if(typeof scheduleAutosave==='function') scheduleAutosave(); });
@@ -1452,6 +1573,7 @@ function getImageNaturalSize(dataUrl){
   });
 }
 document.getElementById('exportPdfBtn').addEventListener('click', async ()=>{
+  if(state.quoteStatus === 'Draft' && !confirm('This quote is still a Draft. Have you checked every part and rate?\n\nOK = export the customer PDF anyway \u00b7 Cancel = go back and check')) return;
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({unit:'pt', format:'a4', orientation:'landscape'});
   const margin = 36;
@@ -2129,7 +2251,8 @@ function collectQuoteData(){
     // The rates this quote is costed with, frozen into the file. This is what stops a
     // saved quote from re-pricing itself when the Rate Master changes later.
     rates: cloneRates(activeRates()),
-    ratesLinked: state.quoteRatesLinked
+    ratesLinked: state.quoteRatesLinked,
+    sourceDocument: state.quoteSource || undefined
   };
 }
 /* The quote as written to OneDrive \u2014 content plus the timestamp. */
@@ -2185,6 +2308,7 @@ function startNewQuote(){
   state.quoteRates = null;
   state.quoteRatesLinked = true;
   state.quoteRatesLegacy = false;
+  state.quoteSource = null;
   state.quoteRatesSavedAt = null;
   document.getElementById('qQuoteNo').value = nextQuoteNumber();
   document.getElementById('qPartNo').value = '';
@@ -2231,6 +2355,7 @@ function applyQuoteData(q){
   state.parts = loadedParts;
   state.extraItems = q.extraItems || [];
   state.quoteStatus = q.status || 'Open';
+  state.quoteSource = q.sourceDocument || null;
   setQuoteMargin(q.margin || state.defaultMargin);
 
   // ---- rate context ----
@@ -2459,7 +2584,7 @@ async function refreshSavedQuotesList(){
   }
 }
 
-const KNOWN_STATUSES = ['Open','Sent','Won','Lost','On-Hold'];
+const KNOWN_STATUSES = ['Draft','Open','Sent','Won','Lost','On-Hold'];
 function renderSavedQuotesList(){
   const box = document.getElementById('savedQuotesList');
   const q = (document.getElementById('savedSearch').value || '').toLowerCase().trim();

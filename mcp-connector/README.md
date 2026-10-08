@@ -21,8 +21,9 @@ Cloudflare Worker (free plan is enough).
 | `list_quotes` | Saved quotes with customer, part name, status, total; search and status filter | No |
 | `get_quote` | One saved quote, priced with the rates stored in it | No |
 | `price_quote` | Full price breakdown for a proposed quote, **without saving** | No |
-| `save_quote` | Save a quote (next `JMC-QT-###` number, or one you give). Stores the rates it used, like the app. Won't replace an existing quote unless told to | Yes |
-| `update_quote_status` | Open / Sent / Won / Lost / On-Hold. Never re-prices | Yes |
+| `save_quote` | Save a quote as a **Draft** (next `JMC-QT-###` number, or one you give). Stores the rates it used, like the app. Won't replace an existing quote unless told to | Yes |
+| `add_parts` | Append more parts to a Draft (large drawing sets are saved in batches of ~20), priced with that quote's stored rates | Yes |
+| `update_quote_status` | Draft / Open / Sent / Won / Lost / On-Hold. Never re-prices | Yes |
 
 It never deletes a quote and never touches the app's crash-recovery file. Rate Master changes:
 
@@ -44,12 +45,46 @@ Example requests:
 
 > MS has gone up to ₹92/kg and OHNS to ₹165. Add EN8 at ₹110/kg with heat treatment at ₹70/kg.
 
+## Quoting from a drawing PDF
+
+1. In Claude, upload the PDF (an RFQ, a drawing set, detail sheets, a BOM; 100 pages is fine) and
+   say *"Quote these parts for Rane"*. The **jmc-quote-from-drawings** skill
+   (`../claude-skills/`) tells Claude how JMC quotes: Rate Master grades, finished sizes (the
+   engine adds stock allowance), HT only where hardness is called up, process costs estimated
+   from your own similar past quotes, bought-out items, and a note on every estimate.
+2. For each part Claude records the page and area of its **best picture** (the isometric view if
+   the sheet has one) and saves the quote as a **Draft**, in batches as it goes.
+3. In the web app: **Saved Quotes → Load** the draft. A banner shows Claude's notes; click
+   **Attach drawing PDF** and pick the same file: the app crops every part's picture from it in
+   your browser (pictures never go through Claude, so a 100-part set stays fast and cheap).
+4. Check each part and rate, set **Status** to Open or Sent, **Save**, then **Export PDF** and send.
+   Exporting while still a Draft asks you first.
+
 ## One-time setup
+
+On a Windows or Mac PC with [Node.js 20+](https://nodejs.org):
+
+```sh
+cd mcp-connector
+node setup.mjs
+```
+
+It opens your browser to sign in to Cloudflare (a free account is enough), creates the token
+store, deploys, and registers the connector with Microsoft Entra. With the
+[Azure CLI](https://aka.ms/installazurecli) installed and a Microsoft 365 admin sign-in it does
+that part too (app registration, permissions, secret, admin consent); without it, it shows the
+few portal clicks and asks you to paste two values. It finishes by checking the connector is
+live and printing what to do in Claude. Run it again any time: finished steps are skipped.
+
+Then in Claude: add the connector (step 5 below) and upload
+`claude-skills/jmc-quote-from-drawings.zip` under **Settings → Capabilities → Skills**.
+
+### Doing it by hand instead
 
 You need: a Cloudflare account (free), access to the Azure portal for the JMC tenant (or your
 Microsoft 365 admin), and Node.js 20+ on the machine you deploy from.
 
-### 1. Install and create the token store
+#### 1. Install and create the token store
 
 ```sh
 cd mcp-connector
@@ -60,14 +95,14 @@ npx wrangler kv namespace create OAUTH_KV
 
 Copy the `id` it prints into `wrangler.jsonc` (`kv_namespaces` → `id`).
 
-### 2. Decide the connector's address
+#### 2. Decide the connector's address
 
 Either the Worker's own address, `https://jmc-quote-connector.<your-subdomain>.workers.dev`
 (your workers.dev subdomain is shown in the Cloudflare dashboard under Workers & Pages), or a
 custom domain such as `https://quotes-ai.jmcengg.com`. Put it in `wrangler.jsonc` as
 `PUBLIC_URL`, with no trailing slash.
 
-### 3. Register the connector with Microsoft Entra ID
+#### 3. Register the connector with Microsoft Entra ID
 
 Azure portal → **Microsoft Entra ID → App registrations → New registration**:
 
@@ -87,7 +122,7 @@ Then, in the new registration:
 
 This is a separate registration from the web app's, so nothing about the web app's sign-in changes.
 
-### 4. Deploy
+#### 4. Deploy
 
 ```sh
 npx wrangler secret put MS_CLIENT_SECRET     # paste the secret Value from step 3
@@ -99,7 +134,7 @@ in the app), set the same name as `ONEDRIVE_FOLDER` in `wrangler.jsonc` before d
 
 Open `PUBLIC_URL` in a browser: you should see a page giving the connector URL.
 
-### 5. Add it to Claude
+#### 5. Add it to Claude
 
 - **Pro / Max:** claude.ai → **Settings → Connectors → Add custom connector**.
 - **Team / Enterprise:** an Owner adds it under **Organization settings → Connectors**, then
